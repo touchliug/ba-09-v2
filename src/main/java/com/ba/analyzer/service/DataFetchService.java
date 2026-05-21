@@ -7,26 +7,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-/**
- * 数据获取服务
- * 封装K线数据和持仓量数据的批量获取逻辑
- * 支持按日/按小时获取K线，并发请求多个交易对的数据
- * 优先从缓存获取数据，缓存未命中时才请求API
- * K线缓存使用统一key(kline:1d:all)，存储最大天数数据，分析器按需截取
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DataFetchService {
 
     private final BinanceClient binanceClient;
-    private final DataCacheService cacheService;
+    private final SqliteDataStore dataStore;
 
     public Map<String, List<KlineData>> fetchDailyKlines(List<String> symbols, int days) {
         return fetchKlinesByInterval(symbols, "1d", days);
@@ -37,37 +29,33 @@ public class DataFetchService {
     }
 
     public Map<String, List<KlineData>> fetchKlinesByInterval(List<String> symbols, String interval, int period) {
-        String cacheKey = "kline:" + interval + ":all";
-        Map<String, List<KlineData>> cached = cacheService.getKlines(cacheKey);
-        boolean hasEnoughData = cached != null && cached.size() >= symbols.size() * 0.9;
+        Map<String, List<KlineData>> stored = dataStore.getKlinesBatch(symbols, interval, period + 1);
+        boolean hasEnoughData = stored.size() >= symbols.size() * 0.9
+                && stored.values().stream().allMatch(k -> k.size() >= period);
+
         if (hasEnoughData) {
-            boolean allHaveEnoughPeriod = cached.values().stream()
-                    .allMatch(klines -> klines.size() >= period);
-            if (allHaveEnoughPeriod) {
-                log.info("Cache hit for {} klines: {} symbols, requested {} periods", interval, cached.size(), period);
-                return trimKlinesByPeriod(cached, period);
-            }
-            log.info("Cache exists but data insufficient for {} periods, re-fetching", period);
+            log.info("SQLite hit for {} klines: {} symbols, {} periods", interval, stored.size(), period);
+            return trimKlinesByPeriod(stored, period);
         }
 
-        log.info("Cache miss, fetching {} klines for {} symbols, {} periods", interval, symbols.size(), period);
+        log.info("Fetching {} klines from API for {} symbols, {} periods", interval, symbols.size(), period);
         ConcurrentMap<String, List<KlineData>> result = new ConcurrentHashMap<>();
 
         binanceClient.executeConcurrent(symbols, symbol -> {
             List<KlineData> klines = binanceClient.getKlines(symbol, interval, period + 1);
             if (!klines.isEmpty()) {
                 result.put(symbol, klines);
+                dataStore.saveKlines(symbol, interval, klines);
             }
             return symbol;
         });
 
-        cacheService.putKlines(cacheKey, result);
-        log.info("Fetched {} klines for {} symbols", interval, result.size());
+        log.info("Fetched and stored {} klines for {} symbols", interval, result.size());
         return result;
     }
 
-    private ConcurrentMap<String, List<KlineData>> trimKlinesByPeriod(Map<String, List<KlineData>> klineMap, int period) {
-        ConcurrentMap<String, List<KlineData>> result = new ConcurrentHashMap<>();
+    private Map<String, List<KlineData>> trimKlinesByPeriod(Map<String, List<KlineData>> klineMap, int period) {
+        Map<String, List<KlineData>> result = new ConcurrentHashMap<>();
         for (Map.Entry<String, List<KlineData>> entry : klineMap.entrySet()) {
             List<KlineData> klines = entry.getValue();
             if (klines.size() <= period) {
@@ -80,72 +68,52 @@ public class DataFetchService {
     }
 
     public Map<String, OpenInterestData> fetchOpenInterest(List<String> symbols) {
-        String cacheKey = "oi:current";
-        Map<String, OpenInterestData> cached = cacheService.getOpenInterest(cacheKey);
-        if (cached != null && cached.size() >= symbols.size() * 0.9) {
-            log.info("Cache hit for open interest: {} symbols", cached.size());
-            return cached;
-        }
-
-        log.info("Cache miss, fetching open interest for {} symbols", symbols.size());
+        log.info("Fetching current open interest for {} symbols", symbols.size());
         ConcurrentMap<String, OpenInterestData> result = new ConcurrentHashMap<>();
-
         binanceClient.executeConcurrent(symbols, symbol -> {
             OpenInterestData oi = binanceClient.getOpenInterest(symbol);
-            if (oi != null) {
-                result.put(symbol, oi);
-            }
+            if (oi != null) result.put(symbol, oi);
             return symbol;
         });
-
-        cacheService.putOpenInterest(cacheKey, result);
         log.info("Fetched open interest for {} symbols", result.size());
         return result;
     }
 
     public List<OpenInterestData> fetchOpenInterestHistory(String symbol, int days) {
-        String cacheKey = "oi:hist:" + symbol + ":" + days;
-        List<OpenInterestData> cached = cacheService.getOiHistory(cacheKey);
-        if (cached != null) {
-            return cached;
+        List<OpenInterestData> stored = dataStore.getOpenInterestHistory(symbol, days);
+        if (stored.size() >= days) {
+            log.debug("SQLite hit for OI history: {} ({} records)", symbol, stored.size());
+            return stored;
         }
-
-        List<OpenInterestData> result = binanceClient.getOpenInterestHistory(symbol, "1d", days);
-        if (!result.isEmpty()) {
-            cacheService.putOiHistory(cacheKey, result);
-        }
-        return result;
+        List<OpenInterestData> fetched = binanceClient.getOpenInterestHistory(symbol, "1d", days);
+        if (!fetched.isEmpty()) dataStore.saveOpenInterest(symbol, fetched);
+        return fetched;
     }
 
     public Map<String, List<OpenInterestData>> fetchOpenInterestHistoryBatch(List<String> symbols, int days) {
-        String cacheKey = "oi:hist:batch:" + days + ":" + Objects.hash(symbols);
-        Map<String, List<OpenInterestData>> cached = cacheService.getOiHistoryBatch(cacheKey);
-        if (cached != null && cached.size() >= symbols.size() * 0.9) {
-            log.info("Cache hit for OI history batch: {} symbols", cached.size());
-            return cached;
+        Map<String, List<OpenInterestData>> stored = dataStore.getOpenInterestBatch(symbols, days);
+        if (stored.size() >= symbols.size() * 0.9) {
+            log.info("SQLite hit for OI history batch: {} symbols", stored.size());
+            return stored;
         }
-
-        log.info("Cache miss, fetching OI history for {} symbols, {} days", symbols.size(), days);
+        log.info("Fetching OI history from API for {} symbols, {} days", symbols.size(), days);
         ConcurrentMap<String, List<OpenInterestData>> result = new ConcurrentHashMap<>();
-
         binanceClient.executeConcurrent(symbols, symbol -> {
             List<OpenInterestData> oiHistory = binanceClient.getOpenInterestHistory(symbol, "1d", days);
             if (!oiHistory.isEmpty()) {
                 result.put(symbol, oiHistory);
+                dataStore.saveOpenInterest(symbol, oiHistory);
             }
             return symbol;
         });
-
-        cacheService.putOiHistoryBatch(cacheKey, result);
-        log.info("Fetched OI history for {} symbols", result.size());
+        log.info("Fetched and stored OI history for {} symbols", result.size());
         return result;
     }
 
     public void preloadDailyKlines(List<String> symbols, int maxDays) {
-        String cacheKey = "kline:1d:all";
-        Map<String, List<KlineData>> cached = cacheService.getKlines(cacheKey);
-        if (cached != null && cached.size() == symbols.size()) {
-            log.info("Preload skipped, cache already exists for daily klines: {} symbols", cached.size());
+        Map<String, List<KlineData>> stored = dataStore.getKlinesBatch(symbols, "1d", maxDays);
+        if (stored.size() >= symbols.size() * 0.9) {
+            log.info("Preload skipped, SQLite has daily klines for {} symbols", stored.size());
             return;
         }
         log.info("Preloading daily klines for {} symbols, {} days", symbols.size(), maxDays);
@@ -153,14 +121,12 @@ public class DataFetchService {
     }
 
     public void preloadHourlyKlines(List<String> symbols, int maxHours) {
-        String cacheKey = "kline:1h:all";
-        Map<String, List<KlineData>> cached = cacheService.getKlines(cacheKey);
-        if (cached != null && cached.size() == symbols.size()) {
-            log.info("Preload skipped, cache already exists for hourly klines: {} symbols", cached.size());
+        Map<String, List<KlineData>> stored = dataStore.getKlinesBatch(symbols, "1h", maxHours);
+        if (stored.size() >= symbols.size() * 0.9) {
+            log.info("Preload skipped, SQLite has hourly klines for {} symbols", stored.size());
             return;
         }
         log.info("Preloading hourly klines for {} symbols, {} hours", symbols.size(), maxHours);
         fetchHourlyKlines(symbols, maxHours);
     }
-
 }
