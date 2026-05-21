@@ -868,17 +868,6 @@
   "pricePrecision" : 4,
   "quantityPrecision" : 0
 }, {
-  "symbol" : "ATAUSDT",
-  "pair" : "ATAUSDT",
-  "contractType" : "PERPETUAL",
-  "deliveryDate" : 4133404800000,
-  "onboardDate" : 1630306800000,
-  "status" : "TRADING",
-  "baseAsset" : "ATA",
-  "quoteAsset" : "USDT",
-  "pricePrecision" : 7,
-  "quantityPrecision" : 0
-}, {
   "symbol" : "DYDXUSDT",
   "pair" : "DYDXUSDT",
   "contractType" : "PERPETUAL",
@@ -1260,17 +1249,6 @@
   "onboardDate" : 1676271600000,
   "status" : "TRADING",
   "baseAsset" : "ASTR",
-  "quoteAsset" : "USDT",
-  "pricePrecision" : 7,
-  "quantityPrecision" : 0
-}, {
-  "symbol" : "PHBUSDT",
-  "pair" : "PHBUSDT",
-  "contractType" : "PERPETUAL",
-  "deliveryDate" : 4133404800000,
-  "onboardDate" : 1676444400000,
-  "status" : "TRADING",
-  "baseAsset" : "PHB",
   "quoteAsset" : "USDT",
   "pricePrecision" : 7,
   "quantityPrecision" : 0
@@ -2404,17 +2382,6 @@
   "onboardDate" : 1723811400000,
   "status" : "TRADING",
   "baseAsset" : "SYN",
-  "quoteAsset" : "USDT",
-  "pricePrecision" : 7,
-  "quantityPrecision" : 0
-}, {
-  "symbol" : "SYSUSDT",
-  "pair" : "SYSUSDT",
-  "contractType" : "PERPETUAL",
-  "deliveryDate" : 4133404800000,
-  "onboardDate" : 1724070600000,
-  "status" : "TRADING",
-  "baseAsset" : "SYS",
   "quoteAsset" : "USDT",
   "pricePrecision" : 7,
   "quantityPrecision" : 0
@@ -3584,17 +3551,6 @@
   "quoteAsset" : "USDT",
   "pricePrecision" : 7,
   "quantityPrecision" : 0
-}, {
-  "symbol" : "MLNUSDT",
-  "pair" : "MLNUSDT",
-  "contractType" : "PERPETUAL",
-  "deliveryDate" : 4133404800000,
-  "onboardDate" : 1743410700000,
-  "status" : "TRADING",
-  "baseAsset" : "MLN",
-  "quoteAsset" : "USDT",
-  "pricePrecision" : 5,
-  "quantityPrecision" : 2
 }, {
   "symbol" : "GUNUSDT",
   "pair" : "GUNUSDT",
@@ -5814,6 +5770,28 @@
   "onboardDate" : 1778141700000,
   "status" : "TRADING",
   "baseAsset" : "BILL",
+  "quoteAsset" : "USDT",
+  "pricePrecision" : 7,
+  "quantityPrecision" : 0
+}, {
+  "symbol" : "PHAROSUSDT",
+  "pair" : "PHAROSUSDT",
+  "contractType" : "PERPETUAL",
+  "deliveryDate" : 4133404800000,
+  "onboardDate" : 1778735700000,
+  "status" : "TRADING",
+  "baseAsset" : "PHAROS",
+  "quoteAsset" : "USDT",
+  "pricePrecision" : 7,
+  "quantityPrecision" : 0
+}, {
+  "symbol" : "STARUSDT",
+  "pair" : "STARUSDT",
+  "contractType" : "PERPETUAL",
+  "deliveryDate" : 4133404800000,
+  "onboardDate" : 1778736600000,
+  "status" : "TRADING",
+  "baseAsset" : "STAR",
   "quoteAsset" : "USDT",
   "pricePrecision" : 7,
   "quantityPrecision" : 0

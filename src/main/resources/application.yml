@@ -6,6 +6,17 @@
 server:
   port: 8080
 
+spring:
+  mvc:
+    log-resolved-exception: false
+  web:
+    resources:
+      add-mappings: true
+
+logging:
+  level:
+    org.springframework.web.servlet.resource.ResourceHttpRequestHandler: ERROR
+
 binance:
   base-url: https://fapi.binance.com
 

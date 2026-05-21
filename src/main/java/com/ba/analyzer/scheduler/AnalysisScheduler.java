@@ -5,7 +5,6 @@ import com.ba.analyzer.analysis.ShortTermRiseAnalyzer;
 import com.ba.analyzer.config.AppProperties;
 import com.ba.analyzer.model.AnalysisReport;
 import com.ba.analyzer.report.ReportWriter;
-import com.ba.analyzer.service.DataCacheService;
 import com.ba.analyzer.service.DataFetchService;
 import com.ba.analyzer.service.SymbolService;
 import jakarta.annotation.PostConstruct;
@@ -38,7 +37,6 @@ public class AnalysisScheduler {
     private final ReportWriter reportWriter;
     private final AppProperties appProperties;
     private final DataFetchService dataFetchService;
-    private final DataCacheService dataCacheService;
     private final List<Analyzer> analyzers;
     private final ExecutorService asyncExecutor;
 
@@ -50,13 +48,12 @@ public class AnalysisScheduler {
 
     public AnalysisScheduler(SymbolService symbolService, ReportWriter reportWriter,
                              AppProperties appProperties, DataFetchService dataFetchService,
-                             DataCacheService dataCacheService, List<Analyzer> analyzers,
+                             List<Analyzer> analyzers,
                              @Qualifier("asyncAnalysisExecutor") ExecutorService asyncExecutor) {
         this.symbolService = symbolService;
         this.reportWriter = reportWriter;
         this.appProperties = appProperties;
         this.dataFetchService = dataFetchService;
-        this.dataCacheService = dataCacheService;
         this.analyzers = analyzers;
         this.asyncExecutor = asyncExecutor;
     }
@@ -64,7 +61,6 @@ public class AnalysisScheduler {
     @PostConstruct
     public void init(){
         List<String> symbols = getSymbols();
-        dataCacheService.clear();
         int maxDays = getMaxDailyDays();
         log.info("Preloading daily klines for {} symbols, {} days", symbols.size(), maxDays);
         dataFetchService.preloadDailyKlines(symbols, maxDays);
@@ -96,7 +92,6 @@ public class AnalysisScheduler {
         log.info("=== Scheduled: Running daily analysis ===");
         List<String> symbols = getSymbols();
 
-        dataCacheService.clear();
         int maxDays = getMaxDailyDays();
         log.info("Preloading daily klines for {} symbols, {} days", symbols.size(), maxDays);
         dataFetchService.preloadDailyKlines(symbols, maxDays);
