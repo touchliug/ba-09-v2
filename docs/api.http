@@ -1,0 +1,238 @@
+### 健康检查
+GET http://localhost:8080/api/health
+
+
+#### 功能列表
+GET http://localhost:8080/api/analysis/list
+
+
+#### 获取分析器参数说明
+GET http://localhost:8080/api/analysis/params/短期急涨
+
+
+#### 合约列表
+GET http://localhost:8080/api/analysis/symbols
+
+
+#### 刷新合约列表
+POST http://localhost:8080/api/analysis/symbols/refresh
+
+
+
+#### 查看所有最新结果
+GET http://localhost:8080/api/analysis/latest
+
+
+#### 查看指定分析器最新结果
+GET http://localhost:8080/api/analysis/latest/短期急涨
+
+
+# ============================================================
+# 同步执行 —— 连续上涨
+# 参数: days=int(默认3)
+# ============================================================
+
+#### 连续上涨 — 默认参数
+POST http://localhost:8080/api/analysis/sync/连续上涨
+
+
+#### 连续上涨 — 自定义days
+POST http://localhost:8080/api/analysis/sync/连续上涨
+Content-Type: application/json
+
+{"days": 3}
+
+#### 连续上涨 — Query参数
+POST http://localhost:8080/api/analysis/sync/连续上涨?days=5
+
+
+# ============================================================
+# 同步执行 —— 连涨今跌
+# 参数: days=int(默认3)
+# ============================================================
+
+#### 连涨今跌 — 默认参数
+POST http://localhost:8080/api/analysis/sync/连涨今跌
+
+
+#### 连涨今跌 — 自定义days
+POST http://localhost:8080/api/analysis/sync/连涨今跌
+Content-Type: application/json
+
+{"days": 4}
+
+#### 连涨今跌 — Query参数
+POST http://localhost:8080/api/analysis/sync/连涨今跌?days=5
+
+
+# ============================================================
+# 同步执行 —— 大幅上涨
+# 参数: days=int(默认7), thresholdPercent=double(默认50)
+# ============================================================
+
+#### 大幅上涨 — 默认参数
+POST http://localhost:8080/api/analysis/sync/大幅上涨
+
+
+#### 大幅上涨 — 自定义
+POST http://localhost:8080/api/analysis/sync/大幅上涨
+Content-Type: application/json
+
+{"days": 30, "thresholdPercent": 100}
+
+#### 大幅上涨 — Query参数
+POST http://localhost:8080/api/analysis/sync/大幅上涨?days=14&thresholdPercent=80
+
+
+# ============================================================
+# 同步执行 —— 连跌今涨
+# 参数: days=int(默认5)
+# ============================================================
+
+#### 连跌今涨 — 默认参数
+POST http://localhost:8080/api/analysis/sync/连跌今涨
+
+
+#### 连跌今涨 — 自定义days
+POST http://localhost:8080/api/analysis/sync/连跌今涨
+Content-Type: application/json
+
+{"days": 5}
+
+#### 连跌今涨 — Query参数
+POST http://localhost:8080/api/analysis/sync/连跌今涨?days=3
+
+
+# ============================================================
+# 同步执行 —— 缓涨币
+# 参数: days=int(默认7), maxDailyChangePercent=double(默认3)
+# ============================================================
+
+#### 缓涨币 — 默认参数
+POST http://localhost:8080/api/analysis/sync/缓涨币
+
+
+#### 缓涨币 — 自定义
+POST http://localhost:8080/api/analysis/sync/缓涨币
+Content-Type: application/json
+
+{"days": 7, "maxDailyChangePercent": 5}
+
+#### 缓涨币 — Query参数
+POST http://localhost:8080/api/analysis/sync/缓涨币?days=7&maxDailyChangePercent=2
+
+
+# ============================================================
+# 同步执行 —— 价涨仓增
+# 参数: days=int(默认5), maxPriceRisePercent=double(默认10), minOiRisePercent=double(默认20)
+# ============================================================
+
+#### 价涨仓增 — 默认参数
+POST http://localhost:8080/api/analysis/sync/价涨仓增
+
+
+#### 价涨仓增 — 自定义(涨幅≤15%、持仓增长≥30%)
+POST http://localhost:8080/api/analysis/sync/价涨仓增
+Content-Type: application/json
+
+{"days": 5, "maxPriceRisePercent": 15, "minOiRisePercent": 80}
+
+#### 价涨仓增 — 自定义(短线)
+POST http://localhost:8080/api/analysis/sync/价涨仓增
+Content-Type: application/json
+
+{"days": 2, "maxPriceRisePercent": 10, "minOiRisePercent": 20}
+
+#### 价涨仓增 — Query参数
+POST http://localhost:8080/api/analysis/sync/价涨仓增?days=3&maxPriceRisePercent=5&minOiRisePercent=10
+
+
+# ============================================================
+# 同步执行 —— 低位插针
+# 参数: days=int(默认7), maxPriceChangePercent=double(默认10), lowPricePercentile=double(默认30)
+# ============================================================
+
+#### 低位插针 — 默认参数
+POST http://localhost:8080/api/analysis/sync/低位插针
+
+
+#### 低位插针 — 自定义(放宽价格波动、低位分位线5%)
+POST http://localhost:8080/api/analysis/sync/低位插针
+Content-Type: application/json
+
+{"days": 15, "maxPriceChangePercent": 20, "lowPricePercentile": 5}
+
+#### 低位插针 — 自定义(长周期)
+POST http://localhost:8080/api/analysis/sync/低位插针
+Content-Type: application/json
+
+{"days": 30, "maxPriceChangePercent": 15, "lowPricePercentile": 40}
+
+#### 低位插针 — Query参数
+POST http://localhost:8080/api/analysis/sync/低位插针?days=7&maxPriceChangePercent=8&lowPricePercentile=20
+
+
+# ============================================================
+# 同步执行 —— 短期急涨 (6因子P/V/B/D/C/T + 起爆加分 0-170)
+# 参数: interval=string(默认5m), period=int(默认6), thresholdPercent=double(默认3), minScore=int(默认70)
+#       launchBodyRatio=double(默认0.6), launchClosePos=double(默认0.8), launchVolRatio=double(默认3.0), takerBuyRatio=double(默认0.55)
+# ============================================================
+
+#### 短期急涨 — 默认参数(5m K线, 6根, ≥3%, ≥70分)
+POST http://localhost:8080/api/analysis/sync/短期急涨
+
+
+#### 短期急涨 — 超短线(1m K线, 低门槛)
+POST http://localhost:8080/api/analysis/sync/短期急涨
+Content-Type: application/json
+
+{"interval": "1m", "period": 10, "thresholdPercent": 2, "minScore": 50, "launchBodyRatio": 0.5, "takerBuyRatio": 0.5}
+
+#### 短期急涨 — 15m中短线(严格)
+POST http://localhost:8080/api/analysis/sync/短期急涨
+Content-Type: application/json
+
+{"interval": "15m", "period": 4, "thresholdPercent": 5, "minScore": 80}
+
+#### 短期急涨 — Query参数
+POST http://localhost:8080/api/analysis/sync/短期急涨?interval=5m&period=6&thresholdPercent=3&minScore=70
+
+
+# ============================================================
+# 同步执行 —— 底部吸筹 (5因子C/Q/W/O/S评分 0-125)
+# 参数: days=int(默认7), minScore=int(默认65), priceChangeMin=double(默认-3), priceChangeMax=double(默认8)
+# ============================================================
+
+#### 底部吸筹 — 默认参数
+POST http://localhost:8080/api/analysis/sync/底部吸筹
+
+
+#### 底部吸筹 — 14天周期
+POST http://localhost:8080/api/analysis/sync/底部吸筹
+Content-Type: application/json
+
+{"days": 14, "minScore": 70, "priceChangeMin": -5, "priceChangeMax": 10}
+
+#### 底部吸筹 — 短线3天
+POST http://localhost:8080/api/analysis/sync/底部吸筹
+Content-Type: application/json
+
+{"days": 3, "minScore": 55, "priceChangeMin": -2, "priceChangeMax": 5}
+
+#### 底部吸筹 — Query参数
+POST http://localhost:8080/api/analysis/sync/底部吸筹?days=10&minScore=50
+
+
+
+#### 连续几天持仓量上涨的B
+POST http://localhost:8080/api/analysis/sync/持仓量连增
+Content-Type: application/json
+
+{"days": 5, "maxPriceRisePercent": 5}
+
+
+#### 首阴日
+POST http://localhost:8080/api/analysis/sync/首阴日
+Content-Type: application/json
+
+{"days": 6, "minTotalRisePercent": 40}

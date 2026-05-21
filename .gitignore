@@ -1,0 +1,7 @@
+target/
+.idea/
+*.iml
+.superpowers/
+.claude/
+.vscode/
+result.json
