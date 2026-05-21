@@ -31,10 +31,6 @@ binance:
     history-buffer-days: 30
     task-timeout-seconds: 120
 
-  cache:
-    ttl-minutes: 7
-    max-size: 500
-
   symbol:
     file-path: ./data/symbols.json
 
@@ -143,8 +139,6 @@ binance:
   concurrency:
     max-requests: 2
     request-interval-ms: 100
-  cache:
-    ttl-minutes: 1
   analysis:
     consecutive-rise:
       days: 2

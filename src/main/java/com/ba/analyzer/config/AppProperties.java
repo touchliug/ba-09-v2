@@ -18,7 +18,6 @@ public class AppProperties {
     private String baseUrl = "https://fapi.binance.com";
     private ProxyConfig proxy = new ProxyConfig();
     private ConcurrencyConfig concurrency = new ConcurrencyConfig();
-    private CacheConfig cache = new CacheConfig();
     private SymbolConfig symbol = new SymbolConfig();
     private AnalysisConfig analysis = new AnalysisConfig();
     private ScheduleConfig schedule = new ScheduleConfig();
@@ -41,14 +40,6 @@ public class AppProperties {
         private int historyBufferDays = 30;
         @Min(10)
         private int taskTimeoutSeconds = 120;
-    }
-
-    @Data
-    public static class CacheConfig {
-        @Min(1)
-        private int ttlMinutes = 5;
-        @Min(10)
-        private int maxSize = 500;
     }
 
     @Data
