@@ -73,6 +73,18 @@ public class AnalysisScheduler {
         }
     }
 
+    @Scheduled(cron = "${binance.schedule.daily-kline-sync}")
+    public void syncDailyKlines() {
+        try {
+            List<String> symbols = getSymbols();
+            int days = getMaxDailyDays();
+            log.info("Hourly daily kline sync: {} symbols, {} days", symbols.size(), days);
+            dataFetchService.fetchDailyKlines(symbols, days);
+        } catch (Exception e) {
+            log.error("Hourly kline sync failed", e);
+        }
+    }
+
     @Scheduled(cron = "${binance.schedule.symbol-update}")
     public void updateSymbols() {
         log.info("=== Scheduled: Updating USDT futures symbols ===");
@@ -119,6 +131,17 @@ public class AnalysisScheduler {
     public void runShortTermAnalysis() {
         log.info("=== Scheduled: Running short-term analysis ===");
         List<String> symbols = getSymbols();
+
+        // Also refresh daily klines and OI when fetching 5m data
+        try {
+            int days = getMaxDailyDays();
+            dataFetchService.fetchDailyKlines(symbols, days);
+            dataFetchService.syncOpenInterest(symbols);
+            dataFetchService.syncFundingRates(symbols);
+            log.info("Daily klines, OI, and funding rates refreshed alongside 5m sync");
+        } catch (Exception e) {
+            log.error("Daily kline/OI refresh failed", e);
+        }
 
         for (Analyzer analyzer : analyzers) {
             if (!(analyzer instanceof ShortTermRiseAnalyzer)) continue;
@@ -186,7 +209,10 @@ public class AnalysisScheduler {
                     Math.max(ac.getPriceDropOiRise().getDays(),
                         Math.max(ac.getLowPriceConsolidation().getDays(),
                             Math.max(ac.getOiConsecutiveRise().getDays(),
-                        Math.max(ac.getFirstYinDay().getDays(), ac.getBullishAccumulation().getDays())))))
+                        Math.max(ac.getFirstYinDay().getDays(),
+                            Math.max(ac.getBullishAccumulation().getDays(),
+                                Math.max(ac.getAltcoinPumpAlert().getDays(),
+                                    ac.getReversalLong().getDeclineMinDays() + 5)))))))
             )
         );
         return maxDays + appProperties.getConcurrency().getHistoryBufferDays();

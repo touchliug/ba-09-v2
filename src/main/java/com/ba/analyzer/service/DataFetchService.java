@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 public class DataFetchService {
 
     private final BinanceClient binanceClient;
-    private final SqliteDataStore dataStore;
+    private final JdbcDataStore dataStore;
 
     public Map<String, List<KlineData>> fetchDailyKlines(List<String> symbols, int days) {
         return fetchKlinesByInterval(symbols, "1d", days);
@@ -30,15 +30,21 @@ public class DataFetchService {
 
     public Map<String, List<KlineData>> fetchKlinesByInterval(List<String> symbols, String interval, int period) {
         Map<String, List<KlineData>> stored = dataStore.getKlinesBatch(symbols, interval, period + 1);
+        long intervalMs = intervalToMillis(interval);
+        long now = System.currentTimeMillis();
         boolean hasEnoughData = stored.size() >= symbols.size() * 0.9
-                && stored.values().stream().allMatch(k -> k.size() >= period);
+                && stored.values().stream().allMatch(k -> k.size() >= period)
+                && stored.values().stream().allMatch(k -> {
+                    long latestOpenTime = k.get(k.size() - 1).getOpenTime();
+                    return now - latestOpenTime < intervalMs * 2;
+                });
 
         if (hasEnoughData) {
             log.info("SQLite hit for {} klines: {} symbols, {} periods", interval, stored.size(), period);
             return trimKlinesByPeriod(stored, period);
         }
 
-        log.info("Fetching {} klines from API for {} symbols, {} periods", interval, symbols.size(), period);
+        log.info("Fetching {} klines from API for {} symbols, {} periods (stale or insufficient)", interval, symbols.size(), period);
         ConcurrentMap<String, List<KlineData>> result = new ConcurrentHashMap<>();
 
         binanceClient.executeConcurrent(symbols, symbol -> {
@@ -52,6 +58,24 @@ public class DataFetchService {
 
         log.info("Fetched and stored {} klines for {} symbols", interval, result.size());
         return result;
+    }
+
+    private long intervalToMillis(String interval) {
+        return switch (interval) {
+            case "1m" -> 60_000L;
+            case "3m" -> 180_000L;
+            case "5m" -> 300_000L;
+            case "15m" -> 900_000L;
+            case "30m" -> 1_800_000L;
+            case "1h" -> 3_600_000L;
+            case "2h" -> 7_200_000L;
+            case "4h" -> 14_400_000L;
+            case "6h" -> 21_600_000L;
+            case "8h" -> 28_800_000L;
+            case "12h" -> 43_200_000L;
+            case "1d" -> 86_400_000L;
+            default -> 86_400_000L;
+        };
     }
 
     private Map<String, List<KlineData>> trimKlinesByPeriod(Map<String, List<KlineData>> klineMap, int period) {
@@ -77,6 +101,24 @@ public class DataFetchService {
         });
         log.info("Fetched open interest for {} symbols", result.size());
         return result;
+    }
+
+    public void syncOpenInterest(List<String> symbols) {
+        Map<String, OpenInterestData> oiMap = fetchOpenInterest(symbols);
+        for (Map.Entry<String, OpenInterestData> entry : oiMap.entrySet()) {
+            dataStore.saveOpenInterest(entry.getKey(), List.of(entry.getValue()));
+        }
+        log.info("Synced open interest for {} symbols to DB", oiMap.size());
+    }
+
+    public void syncFundingRates(List<String> symbols) {
+        log.info("Syncing funding rates for {} symbols", symbols.size());
+        binanceClient.executeConcurrent(symbols, symbol -> {
+            var rates = binanceClient.getFundingRates(symbol, 10);
+            if (!rates.isEmpty()) dataStore.saveFundingRates(symbol, rates);
+            return symbol;
+        });
+        log.info("Funding rate sync done");
     }
 
     public List<OpenInterestData> fetchOpenInterestHistory(String symbol, int days) {

@@ -97,7 +97,7 @@ POST http://localhost:8080/api/analysis/sync/连跌今涨
 POST http://localhost:8080/api/analysis/sync/连跌今涨
 Content-Type: application/json
 
-{"days": 5}
+{"days": 3}
 
 #### 连跌今涨 — Query参数
 POST http://localhost:8080/api/analysis/sync/连跌今涨?days=3
@@ -236,3 +236,42 @@ POST http://localhost:8080/api/analysis/sync/首阴日
 Content-Type: application/json
 
 {"days": 6, "minTotalRisePercent": 40}
+
+
+# ============================================================
+# 同步执行 —— N日高低点
+# 参数: days=int(默认7)
+# ============================================================
+
+#### N日高低点 — 默认参数
+POST http://localhost:8080/api/analysis/sync/N日高低点
+
+
+#### N日高低点 — 自定义天数
+POST http://localhost:8080/api/analysis/sync/N日高低点
+Content-Type: application/json
+
+{"days": 14}
+
+#### N日高低点 — Query参数
+POST http://localhost:8080/api/analysis/sync/N日高低点?days=3
+
+
+# ============================================================
+# 同步执行 —— N日最低
+# 参数: days=int(默认7)
+# 只返回 symbol 和最低价
+# ============================================================
+
+#### N日最低 — 默认参数
+POST http://localhost:8080/api/analysis/sync/N日最低
+
+
+#### N日最低 — 自定义天数
+POST http://localhost:8080/api/analysis/sync/N日最低
+Content-Type: application/json
+
+{"days": 30}
+
+#### N日最低 — Query参数
+POST http://localhost:8080/api/analysis/sync/N日最低?days=3

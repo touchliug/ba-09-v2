@@ -1,6 +1,7 @@
 package com.ba.analyzer.client;
 
 import com.ba.analyzer.config.AppProperties;
+import com.ba.analyzer.model.FundingRateData;
 import com.ba.analyzer.model.KlineData;
 import com.ba.analyzer.model.OpenInterestData;
 import com.ba.analyzer.model.SymbolInfo;
@@ -136,6 +137,22 @@ public class BinanceClient {
             return objectMapper.readValue(json, new TypeReference<List<OpenInterestData>>() {});
         } catch (JsonProcessingException e) {
             log.error("Failed to parse open interest history for symbol: {}", symbol, e);
+            return Collections.emptyList();
+        }
+    }
+
+    public List<FundingRateData> getFundingRates(String symbol, int limit) {
+        String url = UriComponentsBuilder.fromHttpUrl(appProperties.getBaseUrl())
+                .path("/fapi/v1/fundingRate")
+                .queryParam("symbol", symbol)
+                .queryParam("limit", limit)
+                .build().toUriString();
+        String json = executeRequest(url);
+        try {
+            if (json.isEmpty()) return Collections.emptyList();
+            return objectMapper.readValue(json, new TypeReference<List<FundingRateData>>() {});
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse funding rates for symbol: {}", symbol, e);
             return Collections.emptyList();
         }
     }

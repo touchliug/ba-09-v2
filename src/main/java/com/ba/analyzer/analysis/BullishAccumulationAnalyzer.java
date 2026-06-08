@@ -3,7 +3,6 @@ package com.ba.analyzer.analysis;
 import com.ba.analyzer.config.AppProperties;
 import com.ba.analyzer.model.AnalysisReport;
 import com.ba.analyzer.model.KlineData;
-import com.ba.analyzer.model.OpenInterestData;
 import com.ba.analyzer.service.DataFetchService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -13,6 +12,15 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 底部吸筹分析器 (数据驱动重构版)
+ *
+ * 基于53K样本回测, 用4个真正预测"7日内暴涨10%+"的因子:
+ * - P(底部位置): 价格在N日低位 + 大幅回撤 = 跌够了
+ * - H(低点抬高): 后半段最低点 > 前半段最低点 = 买方在抬价
+ * - V(量能回升): 后半段成交量 > 前半段 = 资金在进场(不是缩量!)
+ * - R(振幅收敛): 后半段振幅 < 前半段 = 变盘前夜
+ */
 @Slf4j
 @Component
 public class BullishAccumulationAnalyzer extends AbstractKlineAnalyzer {
@@ -29,7 +37,7 @@ public class BullishAccumulationAnalyzer extends AbstractKlineAnalyzer {
     @Override
     public String getDescription() {
         int minScore = appProperties.getAnalysis().getBullishAccumulation().getMinScore();
-        return String.format("横盘缩量+下影承接+仓位先动信号，蓄力评分≥%d的币", minScore);
+        return String.format("底部位置+低点抬高+量能回升+振幅收敛, 吸筹评分≥%d的币", minScore);
     }
 
     @Override
@@ -41,15 +49,11 @@ public class BullishAccumulationAnalyzer extends AbstractKlineAnalyzer {
     protected Map<String, Object> getDefaultParams() {
         var cfg = appProperties.getAnalysis().getBullishAccumulation();
         return createParams("days", cfg.getDays(), "minScore", cfg.getMinScore(),
-                "consolidationMaxAmplitude", cfg.getConsolidationMaxAmplitude(),
-                "quietVolumeMaxRatio", cfg.getQuietVolumeMaxRatio(),
-                "wickBodyRatio", cfg.getWickBodyRatio(),
-                "oiBeforePriceMinGrowth", cfg.getOiBeforePriceMinGrowth(),
-                "oiBeforePriceMaxPriceRise", cfg.getOiBeforePriceMaxPriceRise(),
-                "silentBuyerRatio", cfg.getSilentBuyerRatio(),
-                "silentBuyerMaxRatioCap", cfg.getSilentBuyerMaxRatioCap(),
-                "priceChangeMin", cfg.getPriceChangeMin(),
-                "priceChangeMax", cfg.getPriceChangeMax());
+                "priceLookbackDays", cfg.getPriceLookbackDays(),
+                "drawdownMin", cfg.getDrawdownMin(),
+                "requireHigherLow", cfg.isRequireHigherLow(),
+                "volumeIncreaseMin", cfg.getVolumeIncreaseMin(),
+                "rangeContractionMax", cfg.getRangeContractionMax());
     }
 
     @Override
@@ -57,24 +61,11 @@ public class BullishAccumulationAnalyzer extends AbstractKlineAnalyzer {
         var cfg = appProperties.getAnalysis().getBullishAccumulation();
         return createParams("days", getIntParam(requestParams, "days", cfg.getDays()),
                 "minScore", getIntParam(requestParams, "minScore", cfg.getMinScore()),
-                "consolidationMaxAmplitude", getDoubleParam(requestParams, "consolidationMaxAmplitude", cfg.getConsolidationMaxAmplitude()),
-                "quietVolumeMaxRatio", getDoubleParam(requestParams, "quietVolumeMaxRatio", cfg.getQuietVolumeMaxRatio()),
-                "wickBodyRatio", getDoubleParam(requestParams, "wickBodyRatio", cfg.getWickBodyRatio()),
-                "oiBeforePriceMinGrowth", getDoubleParam(requestParams, "oiBeforePriceMinGrowth", cfg.getOiBeforePriceMinGrowth()),
-                "oiBeforePriceMaxPriceRise", getDoubleParam(requestParams, "oiBeforePriceMaxPriceRise", cfg.getOiBeforePriceMaxPriceRise()),
-                "silentBuyerRatio", getDoubleParam(requestParams, "silentBuyerRatio", cfg.getSilentBuyerRatio()),
-                "silentBuyerMaxRatioCap", getDoubleParam(requestParams, "silentBuyerMaxRatioCap", cfg.getSilentBuyerMaxRatioCap()),
-                "priceChangeMin", getDoubleParam(requestParams, "priceChangeMin", cfg.getPriceChangeMin()),
-                "priceChangeMax", getDoubleParam(requestParams, "priceChangeMax", cfg.getPriceChangeMax()));
-    }
-
-    @Override
-    protected List<AnalysisReport.CoinAnalysis> doAnalyze(
-            Map<String, List<KlineData>> klineMap, Map<String, Object> params) {
-        int days = (int) params.get("days");
-        List<String> symbols = new ArrayList<>(klineMap.keySet());
-        Map<String, List<OpenInterestData>> oiHistoryMap = dataFetchService.fetchOpenInterestHistoryBatch(symbols, days);
-        return doAnalyzeWithOi(klineMap, oiHistoryMap, params);
+                "priceLookbackDays", getIntParam(requestParams, "priceLookbackDays", cfg.getPriceLookbackDays()),
+                "drawdownMin", getDoubleParam(requestParams, "drawdownMin", cfg.getDrawdownMin()),
+                "requireHigherLow", getBoolParam(requestParams, "requireHigherLow", cfg.isRequireHigherLow()),
+                "volumeIncreaseMin", getDoubleParam(requestParams, "volumeIncreaseMin", cfg.getVolumeIncreaseMin()),
+                "rangeContractionMax", getDoubleParam(requestParams, "rangeContractionMax", cfg.getRangeContractionMax()));
     }
 
     @Override
@@ -85,133 +76,141 @@ public class BullishAccumulationAnalyzer extends AbstractKlineAnalyzer {
 
     @Override
     protected String buildDescription(Map<String, Object> params) {
-        return String.format("横盘缩量+下影承接+仓位先动信号，蓄力评分≥%d的币", (int) params.get("minScore"));
+        return String.format("底部位置+低点抬高+量能回升+振幅收敛, 吸筹评分≥%d的币",
+                (int) params.get("minScore"));
     }
 
-    private List<AnalysisReport.CoinAnalysis> doAnalyzeWithOi(
-            Map<String, List<KlineData>> klineMap,
-            Map<String, List<OpenInterestData>> oiHistoryMap,
-            Map<String, Object> params) {
+    @Override
+    protected List<AnalysisReport.CoinAnalysis> doAnalyze(
+            Map<String, List<KlineData>> klineMap, Map<String, Object> params) {
         int days = (int) params.get("days");
         int minScore = (int) params.get("minScore");
-        double consolidationMaxAmplitude = (double) params.get("consolidationMaxAmplitude");
-        double quietVolumeMaxRatio = (double) params.get("quietVolumeMaxRatio");
-        double wickBodyRatio = (double) params.get("wickBodyRatio");
-        double oiBeforePriceMaxPriceRise = (double) params.get("oiBeforePriceMaxPriceRise");
-        double silentBuyerRatioThreshold = (double) params.get("silentBuyerRatio");
-        double silentBuyerMaxRatioCap = (double) params.get("silentBuyerMaxRatioCap");
-        double priceChangeMin = (double) params.get("priceChangeMin");
-        double priceChangeMax = (double) params.get("priceChangeMax");
+        int priceLookbackDays = (int) params.get("priceLookbackDays");
+        double drawdownMin = (double) params.get("drawdownMin");
+        boolean requireHigherLow = (boolean) params.get("requireHigherLow");
+        double volumeIncreaseMin = (double) params.get("volumeIncreaseMin");
+        double rangeContractionMax = (double) params.get("rangeContractionMax");
+
         List<AnalysisReport.CoinAnalysis> matched = new ArrayList<>();
 
         for (Map.Entry<String, List<KlineData>> entry : klineMap.entrySet()) {
             String symbol = entry.getKey();
             List<KlineData> klines = entry.getValue();
-            if (klines.size() < days) continue;
+            int minNeeded = days + priceLookbackDays;
+            if (klines.size() < minNeeded) continue;
 
-            List<KlineData> recentKlines = klines.subList(klines.size() - days, klines.size());
-            List<KlineData> historicalKlines = klines.subList(0, klines.size() - days);
+            List<KlineData> recent = klines.subList(klines.size() - days, klines.size());
+            List<KlineData> lookback = klines.subList(klines.size() - days - priceLookbackDays, klines.size() - days);
+            if (lookback.isEmpty()) continue;
 
-            double startPrice = recentKlines.get(0).getOpenPrice();
-            double endPrice = recentKlines.get(recentKlines.size() - 1).getClosePrice();
-            if (startPrice <= 0) continue;
-            double priceChange = ((endPrice - startPrice) / startPrice) * 100;
-            if (priceChange < priceChangeMin || priceChange > priceChangeMax) continue;
+            double startPrice = recent.get(0).getOpenPrice();
+            double currentPrice = recent.get(recent.size() - 1).getClosePrice();
+            double priceChange = startPrice > 0 ? (currentPrice - startPrice) / startPrice * 100 : 0;
 
-            double maxHigh = recentKlines.stream().mapToDouble(KlineData::getHighPrice).max().orElse(0);
-            double minLow = recentKlines.stream().mapToDouble(KlineData::getLowPrice).min().orElse(0);
-            double midPrice = (maxHigh + minLow) / 2;
-            double amplitude = midPrice > 0 ? ((maxHigh - minLow) / midPrice) * 100 : 0;
+            // ============================
+            // P — 底部位置 (0-30)
+            // ============================
+            double lookbackHigh = lookback.stream().mapToDouble(KlineData::getHighPrice).max().orElse(0);
+            double lookbackLow = lookback.stream().mapToDouble(KlineData::getLowPrice).min().orElse(0);
+            double lookbackRange = lookbackHigh - lookbackLow;
+            double pricePos = lookbackRange > 0 ? (currentPrice - lookbackLow) / lookbackRange : 0.5;
+            double drawdown = lookbackHigh > 0 ? (lookbackHigh - currentPrice) / lookbackHigh * 100 : 0;
 
-            double histAmplitude = calcHistAmplitude(historicalKlines);
-            int cScore = calcConsolidationScore(amplitude, consolidationMaxAmplitude, histAmplitude);
+            int pScore;
+            if (pricePos <= 0.15 && drawdown >= drawdownMin) pScore = 30;
+            else if (pricePos <= 0.25 && drawdown >= drawdownMin * 0.7) pScore = 22;
+            else if (pricePos <= 0.35) pScore = 15;
+            else if (pricePos <= 0.50) pScore = 8;
+            else pScore = 0;
 
-            double historicalAvgVol = historicalKlines.stream().mapToDouble(KlineData::getQuoteVolume).average().orElse(0);
-            double recentAvgVol = recentKlines.stream().mapToDouble(KlineData::getQuoteVolume).average().orElse(0);
-            double volRatio = historicalAvgVol > 0 ? recentAvgVol / historicalAvgVol : 1.0;
-            long burstDays = historicalAvgVol > 0
-                    ? recentKlines.stream().filter(k -> k.getQuoteVolume() > historicalAvgVol * 2.0).count() : 0;
-            int qScore = calcQuietVolumeScore(volRatio, quietVolumeMaxRatio, burstDays);
+            // ============================
+            // H — 低点抬高 (0-25)
+            // ============================
+            int half = days / 2;
+            List<KlineData> firstHalf = recent.subList(0, half);
+            List<KlineData> secondHalf = recent.subList(half, days);
+            double firstHalfLow = firstHalf.stream().mapToDouble(KlineData::getLowPrice).min().orElse(0);
+            double secondHalfLow = secondHalf.stream().mapToDouble(KlineData::getLowPrice).min().orElse(0);
+            double higherLowPct = firstHalfLow > 0 ? (secondHalfLow - firstHalfLow) / firstHalfLow * 100 : 0;
 
-            int wickCount = countWicks(recentKlines, wickBodyRatio);
-            int wScore = wickCount >= 5 ? 25 : wickCount >= 3 ? 20 : wickCount >= 1 ? 12 : 0;
+            int hScore;
+            if (requireHigherLow && higherLowPct <= 0) {
+                hScore = 0; // Hard requirement not met
+            } else if (higherLowPct >= 5) hScore = 25;
+            else if (higherLowPct >= 2) hScore = 18;
+            else if (higherLowPct > 0) hScore = 10;
+            else hScore = 0;
 
-            List<OpenInterestData> oiHistory = oiHistoryMap.get(symbol);
-            double oiChange = 0;
-            int oScore = 0;
-            if (oiHistory != null && !oiHistory.isEmpty()) {
-                double firstOi = oiHistory.get(0).getOpenInterestValue();
-                double lastOi = oiHistory.get(oiHistory.size() - 1).getOpenInterestValue();
-                if (firstOi > 0) {
-                    oiChange = ((lastOi - firstOi) / firstOi) * 100;
-                    oScore = oiChange >= 15 ? 25 : oiChange >= 10 ? 20 : oiChange >= 5 ? 15 : oiChange >= 0 ? 8 : 0;
-                    if (oScore > 0 && Math.abs(priceChange) < oiBeforePriceMaxPriceRise)
-                        oScore = Math.min(25, oScore + 3);
-                }
+            // ============================
+            // V — 量能回升 (0-25)
+            // ============================
+            double firstHalfAvgVol = firstHalf.stream().mapToDouble(KlineData::getQuoteVolume).average().orElse(0);
+            double secondHalfAvgVol = secondHalf.stream().mapToDouble(KlineData::getQuoteVolume).average().orElse(0);
+            double volIncrease = firstHalfAvgVol > 0 ? secondHalfAvgVol / firstHalfAvgVol : 0;
+
+            int vScore;
+            if (volIncrease >= 2.0) vScore = 25;
+            else if (volIncrease >= volumeIncreaseMin) vScore = 20;
+            else if (volIncrease >= 1.0) vScore = 10;
+            else vScore = 0;
+
+            // ============================
+            // R — 振幅收敛 (0-20)
+            // ============================
+            double firstHalfAmp = calcAvgAmplitude(firstHalf);
+            double secondHalfAmp = calcAvgAmplitude(secondHalf);
+            double rangeRatio = firstHalfAmp > 0 ? secondHalfAmp / firstHalfAmp : 1.0;
+
+            int rScore;
+            if (rangeRatio <= 0.5) rScore = 20;
+            else if (rangeRatio <= rangeContractionMax) rScore = 15;
+            else if (rangeRatio <= 1.0) rScore = 8;
+            else rScore = 0;
+
+            // Count consolidation days: how many days price stayed within narrow range
+            double recentAvgPrice = recent.stream().mapToDouble(KlineData::getClosePrice).average().orElse(0);
+            int consolidationDays = 0;
+            for (int d = recent.size() - 1; d >= 0; d--) {
+                double dev = Math.abs((recent.get(d).getClosePrice() - recentAvgPrice) / recentAvgPrice * 100);
+                if (dev < 3.0) consolidationDays++;
+                else break;
             }
 
-            double silentRatio = calcSilentBuyerRatio(recentKlines, silentBuyerMaxRatioCap);
-            int sScore = silentRatio > 1.8 ? 25 : silentRatio >= silentBuyerRatioThreshold ? 20
-                    : silentRatio >= 1.0 ? 12 : 0;
-
-            int totalScore = cScore + qScore + wScore + oScore + sScore;
+            int totalScore = pScore + hScore + vScore + rScore;
             if (totalScore < minScore) continue;
 
             matched.add(AnalysisReport.CoinAnalysis.builder()
                     .symbol(symbol)
-                    .currentPrice(endPrice)
+                    .currentPrice(currentPrice)
                     .changePercent(priceChange)
                     .score(totalScore)
                     .detail(String.format(
-                            "蓄力评分%d C%d Q%d W%d O%d S%d | 振幅%.1f%% 量比%.2f 针%d次 OI增%.1f%% 吃货比%.2f 放量日%d",
-                            totalScore, cScore, qScore, wScore, oScore, sScore,
-                            amplitude, volRatio, wickCount, oiChange, silentRatio, burstDays))
+                            "吸筹评分%d P%d H%d V%d R%d | 价格低位%.0f%% 回撤%.1f%% 低点%+.1f%% 量增%.1fx 振幅收敛%.1fx 横盘%d天",
+                            totalScore, pScore, hScore, vScore, rScore,
+                            pricePos * 100, drawdown, higherLowPct, volIncrease, rangeRatio, consolidationDays))
                     .build());
         }
         return matched;
     }
 
-    private double calcHistAmplitude(List<KlineData> historicalKlines) {
-        if (historicalKlines.size() < 15) return 0;
-        int histStart = Math.max(0, historicalKlines.size() - 15);
-        List<KlineData> olderKlines = historicalKlines.subList(histStart, historicalKlines.size());
-        double maxH = olderKlines.stream().mapToDouble(KlineData::getHighPrice).max().orElse(0);
-        double minL = olderKlines.stream().mapToDouble(KlineData::getLowPrice).min().orElse(0);
-        double mid = (maxH + minL) / 2;
-        return mid > 0 ? ((maxH - minL) / mid) * 100 : 0;
-    }
-
-    private int calcConsolidationScore(double amplitude, double maxAmplitude, double histAmplitude) {
-        int score = amplitude <= 5 ? 25 : amplitude <= 10 ? 18 : amplitude <= maxAmplitude ? 10 : 0;
-        if (histAmplitude > 0 && amplitude < histAmplitude * 0.5 && score < 25)
-            score = Math.min(25, score + 5);
-        return score;
-    }
-
-    private int calcQuietVolumeScore(double volRatio, double maxRatio, long burstDays) {
-        int score = volRatio < 0.3 ? 25 : volRatio < 0.5 ? 20 : volRatio <= maxRatio ? 15
-                : volRatio <= 1.2 ? 8 : 0;
-        if (burstDays == 0 && score > 12) score = 12;
-        return score;
-    }
-
-    private int countWicks(List<KlineData> klines, double wickBodyRatio) {
+    private double calcAvgAmplitude(List<KlineData> klines) {
+        double total = 0;
         int count = 0;
         for (KlineData k : klines) {
-            double lowerWick = Math.min(k.getOpenPrice(), k.getClosePrice()) - k.getLowPrice();
-            double body = Math.abs(k.getClosePrice() - k.getOpenPrice());
-            if (body > 0 && lowerWick > body * wickBodyRatio) count++;
+            double range = k.getHighPrice() - k.getLowPrice();
+            double mid = (k.getHighPrice() + k.getLowPrice()) / 2;
+            if (mid > 0) {
+                total += range / mid * 100;
+                count++;
+            }
         }
-        return count;
+        return count > 0 ? total / count : 0;
     }
 
-    private double calcSilentBuyerRatio(List<KlineData> klines, double maxCap) {
-        double upVol = 0, downVol = 0;
-        for (KlineData k : klines) {
-            if (k.getClosePrice() > k.getOpenPrice()) upVol += k.getQuoteVolume();
-            else downVol += k.getQuoteVolume();
-        }
-        if (downVol > 0) return upVol / downVol;
-        return upVol > 0 ? maxCap : 0;
+    private boolean getBoolParam(Map<String, Object> params, String key, boolean defaultValue) {
+        if (params == null || !params.containsKey(key)) return defaultValue;
+        Object val = params.get(key);
+        if (val instanceof Boolean b) return b;
+        return Boolean.parseBoolean(val.toString());
     }
 }

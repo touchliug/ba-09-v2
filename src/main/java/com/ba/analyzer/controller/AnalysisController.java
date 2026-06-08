@@ -252,10 +252,40 @@ public class AnalysisController {
                 yield params;
             }
             case "底部吸筹" -> {
+                params.put("days", Map.of("type", "int", "description", "分析窗口(天)", "default", 14));
+                params.put("minScore", Map.of("type", "int", "description", "最低吸筹评分", "default", 60));
+                params.put("priceLookbackDays", Map.of("type", "int", "description", "价格位置回溯天数", "default", 30));
+                params.put("drawdownMin", Map.of("type", "double", "description", "最低回撤%", "default", 10.0));
+                params.put("requireHigherLow", Map.of("type", "boolean", "description", "要求低点抬高", "default", true));
+                params.put("volumeIncreaseMin", Map.of("type", "double", "description", "量能回升最小倍数", "default", 1.2));
+                params.put("rangeContractionMax", Map.of("type", "double", "description", "振幅收敛最大比例", "default", 0.8));
+                yield params;
+            }
+            case "N日最低" -> {
+                params.put("days", Map.of("type", "int", "description", "统计天数", "default", 7));
+                yield params;
+            }
+            case "反转做多" -> {
+                params.put("declineMinDays", Map.of("type", "int", "description", "最少连续下跌天数", "default", 4));
+                params.put("declineMinPct", Map.of("type", "double", "description", "累计跌幅下限%", "default", 5.0));
+                params.put("declineMaxPct", Map.of("type", "double", "description", "累计跌幅上限%", "default", 12.0));
+                params.put("reversalMinPct", Map.of("type", "double", "description", "反转日涨幅下限%", "default", 1.0));
+                params.put("reversalMaxPct", Map.of("type", "double", "description", "反转日涨幅上限%", "default", 4.0));
+                params.put("takeProfitPct", Map.of("type", "double", "description", "止盈点位%", "default", 6.0));
+                params.put("stopLossPct", Map.of("type", "double", "description", "止损点位%", "default", 4.0));
+                params.put("volumeConfirmRatio", Map.of("type", "double", "description", "反转日量比阈值(1.0=不过滤)", "default", 1.0));
+                yield params;
+            }
+            case "山寨币暴涨预警" -> {
                 params.put("days", Map.of("type", "int", "description", "分析周期(天)", "default", 7));
-                params.put("minScore", Map.of("type", "int", "description", "最低总分阈值", "default", 65));
-                params.put("priceChangeMin", Map.of("type", "double", "description", "最低涨跌幅%", "default", -3));
-                params.put("priceChangeMax", Map.of("type", "double", "description", "最高涨跌幅%", "default", 8));
+                params.put("minScore", Map.of("type", "int", "description", "最低预警评分", "default", 65));
+                params.put("maxPriceDeclinePercent", Map.of("type", "double", "description", "最大价格跌幅%(防接飞刀)", "default", 15.0));
+                params.put("oiConsecutiveDays", Map.of("type", "int", "description", "OI连续上涨最少天数", "default", 3));
+                params.put("volumeExpansionRatio", Map.of("type", "double", "description", "量能扩张倍数阈值", "default", 1.5));
+                params.put("lowPricePercentile", Map.of("type", "double", "description", "低价分位数阈值", "default", 35.0));
+                params.put("wickBodyRatio", Map.of("type", "double", "description", "下影线/实体最小倍数", "default", 1.5));
+                params.put("silentBuyerRatio", Map.of("type", "double", "description", "吃货比(阳量/阴量)阈值", "default", 1.3));
+                params.put("maxDrawdownPercent", Map.of("type", "double", "description", "窗口最大回撤上限%", "default", 25.0));
                 yield params;
             }
             default -> params;

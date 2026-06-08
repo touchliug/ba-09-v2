@@ -4,7 +4,7 @@ const API_BASE = '/api/analysis';
 const api = {
     async health() {
         const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 5000);
+        const tid = setTimeout(() => ctrl.abort(), 180000);
         try {
             const res = await fetch('/api/health', { signal: ctrl.signal });
             return res.ok;
@@ -45,7 +45,7 @@ const api = {
 
     async sync(name, params) {
         const ctrl = new AbortController();
-        const tid = setTimeout(() => ctrl.abort(), 30000);
+        const tid = setTimeout(() => ctrl.abort(), 180000);
         try {
             const res = await fetch(`${API_BASE}/sync/${encodeURIComponent(name)}`, {
                 method: 'POST',
@@ -310,10 +310,15 @@ function renderResultTable(report) {
     }
 
     const hasScore = report.coins.some(c => c.score != null && c.score !== undefined);
+    const isReversal = report.analysisType === '反转做多';
+    const isNDayLow = report.analysisType === 'N日最低';
     const sorted = [...report.coins].sort((a, b) => {
         if (hasScore) return (b.score || 0) - (a.score || 0);
         return (b.changePercent || 0) - (a.changePercent || 0);
     });
+
+    let leopardCount = 0;
+    let integerCount = 0;
 
     let rows = '';
     for (const coin of sorted) {
@@ -324,27 +329,80 @@ function renderResultTable(report) {
             const sign = pct > 0 ? '+' : '';
             pctHtml = `<span class="${cls}">${sign}${pct.toFixed(2)}%</span>`;
         }
-        const scoreCell = hasScore ? `<td>${coin.score != null ? escHtml(String(coin.score)) : '--'}</td>` : '';
-        rows += `<tr>
+        let scoreCell = '';
+        if (hasScore) {
+            const s = coin.score || 0;
+            const cls = s >= 80 ? 'score-high' : s >= 60 ? 'score-mid' : 'score-low';
+            scoreCell = `<td><span class="score-badge ${cls}">${s}</span></td>`;
+        }
+
+        // N日最低: parse detail for low price and date
+        let lowPriceCell = '';
+        let lowDateCell = '';
+        let rowClass = '';
+        if (isNDayLow && coin.detail) {
+            const d = coin.detail;
+            const lowMatch = d.match(/最低([\d.]+)\((\d{2}-\d{2})\)/);
+            const lowPrice = lowMatch ? lowMatch[1] : '';
+            const lowDate = lowMatch ? lowMatch[2] : '';
+            const isLeopard = d.includes('[豹子号]');
+            const isInteger = d.includes('[整数关口]');
+
+            if (isLeopard) { rowClass = ' row-leopard'; leopardCount++; }
+            else if (isInteger) { rowClass = ' row-integer'; integerCount++; }
+
+            let lpClass = '';
+            if (isLeopard) lpClass = ' class="price-leopard"';
+            else if (isInteger) lpClass = ' class="price-integer"';
+            lowPriceCell = `<td${lpClass}>${lowPrice}</td>`;
+            lowDateCell = `<td>${lowDate}</td>`;
+        }
+
+        // For reversal analyzer: highlight key prices in detail
+        let detailHtml = escHtml(coin.detail || '');
+        if (isReversal && coin.detail) {
+            detailHtml = coin.detail
+                .replace(/入场([\d.]+)/g, '<span class="hl-entry">入场$1</span>')
+                .replace(/止盈([\d.]+)\(([^)]+)\)/g, '<span class="hl-tp">止盈$1($2)</span>')
+                .replace(/止损([\d.]+)\(([^)]+)\)/g, '<span class="hl-sl">止损$1($2)</span>')
+                .replace(/盈亏比([\d.]+)/g, '<span class="hl-rr">盈亏比$1</span>')
+                .replace(/\[([^\]]+)\]/, '<span class="hl-date">[$1]</span>');
+        }
+
+        rows += `<tr class="${rowClass}">
             <td><strong>${escHtml(coin.symbol)}</strong></td>
             <td>${coin.currentPrice != null ? escHtml(String(coin.currentPrice)) : '--'}</td>
             <td>${pctHtml}</td>
             ${scoreCell}
-            <td style="max-width:300px;word-break:break-word">${escHtml(coin.detail || '')}</td>
+            ${lowPriceCell}
+            ${lowDateCell}
+            <td class="detail-cell">${detailHtml}</td>
         </tr>`;
     }
 
     const scoreHeader = hasScore ? '<th>评分</th>' : '';
+    const priceHeader = isReversal ? '<th>入场价</th>' : '<th>当前价格</th>';
+    const chgHeader = isReversal ? '<th>反转涨幅</th>' : (isNDayLow ? '<th>距最低</th>' : '<th>涨跌幅</th>');
+    const nDayHeaders = isNDayLow ? '<th>N日最低</th><th>最低日期</th>' : '';
+
+    let specialSummary = '';
+    if (isNDayLow && (leopardCount > 0 || integerCount > 0)) {
+        let parts = [];
+        if (leopardCount > 0) parts.push(`<span class="tag-leopard">豹子号: ${leopardCount}</span>`);
+        if (integerCount > 0) parts.push(`<span class="tag-integer">整数关口: ${integerCount}</span>`);
+        specialSummary = `&nbsp;|&nbsp; ${parts.join(' &nbsp; ')}`;
+    }
+
     container.innerHTML = `
         <div class="result-summary">
             分析时间: ${escHtml(formatTime(report.analysisTime))} &nbsp;|&nbsp;
             共分析: ${escHtml(String(report.totalAnalyzed || '--'))} &nbsp;|&nbsp;
-            符合条件: <strong>${escHtml(String(report.matchedCount || 0))}</strong>
+            符合条件: <strong>${escHtml(String(report.matchedCount || 0))}</strong>${specialSummary}
         </div>
         <div class="result-table-wrap">
             <table class="result-table">
                 <thead><tr>
-                    <th>币种</th><th>当前价格</th><th>涨跌幅</th>${scoreHeader}<th>详情</th>
+                    <th>币种</th>${priceHeader}${chgHeader}${scoreHeader}${nDayHeaders}<th>详情</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>

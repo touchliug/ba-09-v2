@@ -10,6 +10,14 @@ spring:
   mvc:
     log-resolved-exception: false
   web:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
     resources:
       add-mappings: true
 
@@ -91,17 +99,13 @@ binance:
 
     bullish-accumulation:
       enabled: false
-      days: 7
-      min-score: 65
-      consolidation-max-amplitude: 10
-      quiet-volume-max-ratio: 0.8
-      wick-body-ratio: 1.5
-      oi-before-price-min-growth: 5
-      oi-before-price-max-price-rise: 5
-      silent-buyer-ratio: 1.3
-      silent-buyer-max-ratio-cap: 10.0
-      price-change-min: -3.0
-      price-change-max: 8.0
+      days: 14
+      min-score: 60
+      price-lookback-days: 30
+      drawdown-min: 10.0
+      require-higher-low: true
+      volume-increase-min: 1.2
+      range-contraction-max: 0.8
 
     first-yin-day:
       enabled: false
@@ -119,10 +123,38 @@ binance:
       enabled: false
       days: 7
 
+    n-day-low:
+      enabled: false
+      days: 7
+
+    altcoin-pump-alert:
+      enabled: false
+      days: 7
+      min-score: 65
+      max-price-decline-percent: 15.0
+      oi-consecutive-days: 3
+      volume-expansion-ratio: 1.5
+      low-price-percentile: 35.0
+      wick-body-ratio: 1.5
+      silent-buyer-ratio: 1.3
+      max-drawdown-percent: 25.0
+
+    reversal-long:
+      enabled: false
+      decline-min-days: 4
+      decline-min-pct: 5.0
+      decline-max-pct: 12.0
+      reversal-min-pct: 1.0
+      reversal-max-pct: 4.0
+      take-profit-pct: 6.0
+      stop-loss-pct: 4.0
+      volume-confirm-ratio: 1.0
+
   schedule:
     symbol-update: "0 0 6 * * ?"
     daily-analysis: "0 5 8 * * ?"
     short-term-analysis: "0 */5 * * * ?"
+    daily-kline-sync: "0 37 * * * ?"
 
   report:
     dir: ./reports
@@ -169,3 +201,11 @@ binance:
       launch-close-pos: 0.8
       launch-vol-ratio: 3.0
       taker-buy-ratio: 0.55
+    altcoin-pump-alert:
+      days: 3
+      oi-consecutive-days: 2
+      max-drawdown-percent: 30.0
+    reversal-long:
+      decline-min-days: 3
+      decline-min-pct: 3.0
+      decline-max-pct: 15.0

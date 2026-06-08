@@ -7,6 +7,8 @@ import com.ba.analyzer.service.DataFetchService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -90,12 +92,21 @@ public class RiseThenDropAnalyzer extends AbstractKlineAnalyzer {
 
             double totalRise = prevDays.stream().mapToDouble(KlineData::getChangePercent).sum();
 
+            // Format dates
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MM-dd");
+            String riseStart = java.time.LocalDateTime.ofEpochSecond(
+                    prevDays.get(0).getOpenTime() / 1000, 0, ZoneOffset.ofHours(8)).format(fmt);
+            String riseEnd = java.time.LocalDateTime.ofEpochSecond(
+                    prevDays.get(prevDays.size() - 1).getOpenTime() / 1000, 0, ZoneOffset.ofHours(8)).format(fmt);
+            String dropDate = java.time.LocalDateTime.ofEpochSecond(
+                    today.getOpenTime() / 1000, 0, ZoneOffset.ofHours(8)).format(fmt);
+
             matched.add(AnalysisReport.CoinAnalysis.builder()
                     .symbol(symbol)
                     .currentPrice(today.getClosePrice())
                     .changePercent(today.getChangePercent())
-                    .detail(String.format("前%d天累计涨%.2f%%，今日跌%.2f%%，今日放量%.1f倍",
-                            days, totalRise, today.getChangePercent(), vr))
+                    .detail(String.format("连涨%d天(%s~%s)累计+%.2f%%，%s跌%.2f%%，放量%.1f倍",
+                            days, riseStart, riseEnd, totalRise, dropDate, today.getChangePercent(), vr))
                     .build());
         }
         return matched;

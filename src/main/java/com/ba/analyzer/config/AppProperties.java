@@ -61,6 +61,9 @@ public class AppProperties {
         private FirstYinDayConfig firstYinDay = new FirstYinDayConfig();
         private OiConsecutiveRiseConfig oiConsecutiveRise = new OiConsecutiveRiseConfig();
         private NMinMaxConfig nMinMax = new NMinMaxConfig();
+        private NDayLowConfig nDayLow = new NDayLowConfig();
+        private AltcoinPumpAlertConfig altcoinPumpAlert = new AltcoinPumpAlertConfig();
+        private ReversalLongConfig reversalLong = new ReversalLongConfig();
     }
 
     @Data
@@ -135,17 +138,20 @@ public class AppProperties {
     @Data
     public static class BullishAccumulationConfig {
         private boolean enabled = false;
-        private int days = 7;
-        private int minScore = 65;
-        private double consolidationMaxAmplitude = 10;
-        private double quietVolumeMaxRatio = 0.8;
-        private double wickBodyRatio = 1.5;
-        private double oiBeforePriceMinGrowth = 5;
-        private double oiBeforePriceMaxPriceRise = 5;
-        private double silentBuyerRatio = 1.3;
-        private double silentBuyerMaxRatioCap = 10.0;
-        private double priceChangeMin = -3.0;
-        private double priceChangeMax = 8.0;
+        // 分析窗口(天)
+        private int days = 14;
+        // 最低总分
+        private int minScore = 60;
+        // 价格位置: 回溯天数
+        private int priceLookbackDays = 30;
+        // 价格位置: 最低回撤% (从回溯期高点)
+        private double drawdownMin = 10.0;
+        // 低点抬高: 后半段最低点需高于前半段最低点
+        private boolean requireHigherLow = true;
+        // 量能回升: 后半段均量/前半段均量 >= 此值
+        private double volumeIncreaseMin = 1.2;
+        // 振幅收敛: 后半段振幅/前半段振幅 <= 此值
+        private double rangeContractionMax = 0.8;
     }
 
     @Data
@@ -171,10 +177,54 @@ public class AppProperties {
     }
 
     @Data
+    public static class NDayLowConfig {
+        private boolean enabled = false;
+        private int days = 7;
+    }
+
+    @Data
+    public static class AltcoinPumpAlertConfig {
+        private boolean enabled = false;
+        private int days = 7;
+        private int minScore = 65;
+        // 窗口内价格跌幅上限(%), 防止接飞刀. 放宽以捕捉趋势延续型暴涨
+        private double maxPriceDeclinePercent = 15.0;
+        private int oiConsecutiveDays = 3;
+        private double volumeExpansionRatio = 1.5;
+        private double lowPricePercentile = 35.0;
+        private double wickBodyRatio = 1.5;
+        private double silentBuyerRatio = 1.3;
+        // 窗口内最大回撤上限(%), 排除仍在暴跌的币
+        private double maxDrawdownPercent = 25.0;
+    }
+
+    @Data
+    public static class ReversalLongConfig {
+        private boolean enabled = false;
+        // 连跌检测: 最少连续下跌天数
+        private int declineMinDays = 4;
+        // 累计跌幅范围(%): 绝对值, 下限
+        private double declineMinPct = 5.0;
+        // 累计跌幅范围(%): 绝对值, 上限
+        private double declineMaxPct = 12.0;
+        // 反转日涨幅下限(%)
+        private double reversalMinPct = 1.0;
+        // 反转日涨幅上限(%)
+        private double reversalMaxPct = 4.0;
+        // 止盈点位(%)
+        private double takeProfitPct = 6.0;
+        // 止损点位(%)
+        private double stopLossPct = 4.0;
+        // 反转日量能确认: 反转日成交量/跌势均量 >= 此值才有效 (1.0=不启用)
+        private double volumeConfirmRatio = 1.0;
+    }
+
+    @Data
     public static class ScheduleConfig {
         private String symbolUpdate = "0 0 6 * * ?";
         private String dailyAnalysis = "0 5 8 * * ?";
         private String shortTermAnalysis = "0 */10 * * * ?";
+        private String dailyKlineSync = "0 37 * * * ?";
     }
 
     @Data
