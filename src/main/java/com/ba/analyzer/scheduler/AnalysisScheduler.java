@@ -1,7 +1,6 @@
 package com.ba.analyzer.scheduler;
 
 import com.ba.analyzer.analysis.Analyzer;
-import com.ba.analyzer.analysis.ShortTermRiseAnalyzer;
 import com.ba.analyzer.config.AppProperties;
 import com.ba.analyzer.model.AnalysisReport;
 import com.ba.analyzer.report.ReportWriter;
@@ -42,6 +41,9 @@ public class AnalysisScheduler {
 
     private final Map<String, AnalysisReport> latestReports = new ConcurrentHashMap<>();
     private final Set<String> runningAnalyzers = ConcurrentHashMap.newKeySet();
+
+    /** 5m OI拉取周期数: 288根=24h, 取300留余量以覆盖24h窗口。 */
+    private static final int INTRADAY_OI_PERIODS = 300;
 
     private volatile List<String> cachedSymbols = List.of();
     private final Object symbolsLock = new Object();
@@ -109,7 +111,7 @@ public class AnalysisScheduler {
         dataFetchService.preloadDailyKlines(symbols, maxDays);
 
         for (Analyzer analyzer : analyzers) {
-            if (analyzer instanceof ShortTermRiseAnalyzer) continue;
+            if (analyzer.requiresIntradayData()) continue; // 日内数据分析器在short-term批次运行
             if (!analyzer.isEnabled()) {
                 log.info("Analyzer {} is disabled, skipping", analyzer.getName());
                 continue;
@@ -137,14 +139,15 @@ public class AnalysisScheduler {
             int days = getMaxDailyDays();
             dataFetchService.fetchDailyKlines(symbols, days);
             dataFetchService.syncOpenInterest(symbols);
+            dataFetchService.syncIntradayOi(symbols, INTRADAY_OI_PERIODS);
             dataFetchService.syncFundingRates(symbols);
-            log.info("Daily klines, OI, and funding rates refreshed alongside 5m sync");
+            log.info("Daily klines, current+5m OI, and funding rates refreshed alongside 5m sync");
         } catch (Exception e) {
             log.error("Daily kline/OI refresh failed", e);
         }
 
         for (Analyzer analyzer : analyzers) {
-            if (!(analyzer instanceof ShortTermRiseAnalyzer)) continue;
+            if (!analyzer.requiresIntradayData()) continue; // 仅运行日内数据分析器
             if (!analyzer.isEnabled()) {
                 log.info("Analyzer {} is disabled, skipping", analyzer.getName());
                 continue;
@@ -200,21 +203,12 @@ public class AnalysisScheduler {
     }
 
     private int getMaxDailyDays() {
-        AppProperties.AnalysisConfig ac = appProperties.getAnalysis();
-        int maxDays = Math.max(
-            Math.max(ac.getConsecutiveRise().getDays(), ac.getRiseThenDrop().getDays()),
-            Math.max(
-                Math.max(ac.getHighRise().getDays(), ac.getDropThenRise().getDays()),
-                Math.max(ac.getSlowRise().getDays(),
-                    Math.max(ac.getPriceDropOiRise().getDays(),
-                        Math.max(ac.getLowPriceConsolidation().getDays(),
-                            Math.max(ac.getOiConsecutiveRise().getDays(),
-                        Math.max(ac.getFirstYinDay().getDays(),
-                            Math.max(ac.getBullishAccumulation().getDays(),
-                                Math.max(ac.getAltcoinPumpAlert().getDays(),
-                                    ac.getReversalLong().getDeclineMinDays() + 5)))))))
-            )
-        );
+        // 遍历所有非日内分析器, 取其声明的最大所需天数 (新增分析器无需改此方法)
+        int maxDays = analyzers.stream()
+                .filter(a -> !a.requiresIntradayData())
+                .mapToInt(Analyzer::requiredDays)
+                .max()
+                .orElse(7);
         return maxDays + appProperties.getConcurrency().getHistoryBufferDays();
     }
 }

@@ -11,9 +11,13 @@ spring:
     log-resolved-exception: false
   web:
   datasource:
-    url: jdbc:mysql://localhost:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+#    url: jdbc:mysql://localhost:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://192.168.193.128:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+
     username: root
-    password: ${MYSQL_PASSWORD:}
+#    password: Kzfx8N78@123456
+    password: Test#1234
+
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
@@ -149,6 +153,17 @@ binance:
       take-profit-pct: 6.0
       stop-loss-pct: 4.0
       volume-confirm-ratio: 1.0
+      quality-min-score: 55
+    composite-score:
+      enabled: true
+      min-score: 50
+      oi-weight: 25
+      price-weight: 20
+      funding-weight: 15
+      volume-weight: 15
+      social-weight: 0
+      venue-weight: 0
+      early-price-max-pct: 15.0
 
   schedule:
     symbol-update: "0 0 6 * * ?"

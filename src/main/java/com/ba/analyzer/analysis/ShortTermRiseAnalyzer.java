@@ -42,6 +42,11 @@ public class ShortTermRiseAnalyzer extends AbstractKlineAnalyzer {
     }
 
     @Override
+    public boolean requiresIntradayData() {
+        return true;
+    }
+
+    @Override
     protected Map<String, Object> getDefaultParams() {
         var cfg = appProperties.getAnalysis().getShortTermRise();
         return createParams("interval", cfg.getInterval(), "period", cfg.getPeriod(),

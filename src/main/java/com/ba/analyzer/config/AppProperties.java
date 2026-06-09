@@ -64,6 +64,7 @@ public class AppProperties {
         private NDayLowConfig nDayLow = new NDayLowConfig();
         private AltcoinPumpAlertConfig altcoinPumpAlert = new AltcoinPumpAlertConfig();
         private ReversalLongConfig reversalLong = new ReversalLongConfig();
+        private CompositeScoreConfig compositeScore = new CompositeScoreConfig();
     }
 
     @Data
@@ -217,6 +218,25 @@ public class AppProperties {
         private double stopLossPct = 4.0;
         // 反转日量能确认: 反转日成交量/跌势均量 >= 此值才有效 (1.0=不启用)
         private double volumeConfirmRatio = 1.0;
+        // 反转质量评分最低分(0-100): 低于此分的信号过滤掉 (0=不过滤,仅排序)。
+        // 回测(2739笔)显示: >=55胜率55%, >=65胜率60%, >=75胜率62%。生产默认55。
+        private int qualityMinScore = 55;
+    }
+
+    @Data
+    public static class CompositeScoreConfig {
+        private boolean enabled = true;
+        // 最低综合分(0-100): 低于此分不输出
+        private int minScore = 50;
+        // 各维度权重 (你有OI/价格/费率/量能4维, 社媒/多交易所暂为扩展位=0)
+        private int oiWeight = 25;
+        private int priceWeight = 20;
+        private int fundingWeight = 15;
+        private int volumeWeight = 15;
+        private int socialWeight = 0;   // 预留, 无数据源
+        private int venueWeight = 0;    // 预留, 无数据源
+        // 价格"早期"窗口上限(%): 24h涨幅超此值价格分递减(防追高)
+        private double earlyPriceMaxPct = 15.0;
     }
 
     @Data

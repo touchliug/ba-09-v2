@@ -55,15 +55,41 @@ public class JdbcDataStore {
         jdbc.execute("""
             CREATE TABLE IF NOT EXISTS open_interest (
                 symbol VARCHAR(20) NOT NULL,
+                period VARCHAR(10) NOT NULL DEFAULT '1d',
                 `timestamp` BIGINT NOT NULL,
                 open_interest VARCHAR(50),
                 sum_open_interest VARCHAR(50),
                 sum_open_interest_value VARCHAR(50),
-                PRIMARY KEY (symbol, `timestamp`),
-                INDEX idx_oi_lookup (symbol, `timestamp` DESC)
+                PRIMARY KEY (symbol, period, `timestamp`),
+                INDEX idx_oi_lookup (symbol, period, `timestamp` DESC)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """);
+        migrateOpenInterestPeriod();
         log.info("MySQL tables ready");
+    }
+
+    /**
+     * 幂等迁移: 旧 open_interest 表主键为 (symbol, timestamp) 且无 period 列。
+     * 检测到无 period 列时, 添加列(默认'1d'回填历史数据)并将主键重建为 (symbol, period, timestamp)。
+     * 已是新结构则跳过。
+     */
+    private void migrateOpenInterestPeriod() {
+        Integer hasPeriod = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'open_interest' AND COLUMN_NAME = 'period'
+        """, Integer.class);
+        if (hasPeriod != null && hasPeriod > 0) {
+            return;
+        }
+        log.info("Migrating open_interest: adding period column and rebuilding primary key");
+        jdbc.execute("ALTER TABLE open_interest ADD COLUMN period VARCHAR(10) NOT NULL DEFAULT '1d'");
+        jdbc.execute("ALTER TABLE open_interest DROP PRIMARY KEY, ADD PRIMARY KEY (symbol, period, `timestamp`)");
+        try {
+            jdbc.execute("ALTER TABLE open_interest ADD INDEX idx_oi_lookup (symbol, period, `timestamp` DESC)");
+        } catch (Exception e) {
+            log.warn("idx_oi_lookup may already exist, skipping: {}", e.getMessage());
+        }
+        log.info("open_interest migration done (existing rows defaulted to period='1d')");
     }
 
     // ======================== Kline CRUD ========================
@@ -113,36 +139,51 @@ public class JdbcDataStore {
     // ======================== Open Interest CRUD ========================
 
     private static final String UPSERT_OI = """
-        INSERT INTO open_interest (symbol, `timestamp`, open_interest, sum_open_interest, sum_open_interest_value)
-        VALUES (?,?,?,?,?)
+        INSERT INTO open_interest (symbol, period, `timestamp`, open_interest, sum_open_interest, sum_open_interest_value)
+        VALUES (?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
             open_interest=VALUES(open_interest),
             sum_open_interest=VALUES(sum_open_interest),
             sum_open_interest_value=VALUES(sum_open_interest_value)
     """;
 
+    /** 保存日线OI (向后兼容, period='1d')。 */
     public void saveOpenInterest(String symbol, List<OpenInterestData> dataList) {
+        saveOpenInterest(symbol, "1d", dataList);
+    }
+
+    public void saveOpenInterest(String symbol, String period, List<OpenInterestData> dataList) {
         if (dataList == null || dataList.isEmpty()) return;
         List<Object[]> batch = new ArrayList<>();
         for (OpenInterestData oi : dataList) {
             long ts = oi.getTimestamp() > 0 ? oi.getTimestamp() : oi.getTime();
-            batch.add(new Object[]{symbol, ts, oi.getOpenInterest(),
+            batch.add(new Object[]{symbol, period, ts, oi.getOpenInterest(),
                     oi.getSumOpenInterest(), oi.getSumOpenInterestValue()});
         }
         jdbc.batchUpdate(UPSERT_OI, batch);
     }
 
+    /** 读取日线OI历史 (向后兼容, period='1d')。 */
     public List<OpenInterestData> getOpenInterestHistory(String symbol, int limit) {
-        String sql = "SELECT * FROM open_interest WHERE symbol=? ORDER BY `timestamp` DESC LIMIT ?";
-        List<OpenInterestData> result = jdbc.query(sql, this::mapOi, symbol, limit);
+        return getOpenInterestHistory(symbol, "1d", limit);
+    }
+
+    public List<OpenInterestData> getOpenInterestHistory(String symbol, String period, int limit) {
+        String sql = "SELECT * FROM open_interest WHERE symbol=? AND period=? ORDER BY `timestamp` DESC LIMIT ?";
+        List<OpenInterestData> result = jdbc.query(sql, this::mapOi, symbol, period, limit);
         Collections.reverse(result);
         return result;
     }
 
+    /** 批量读取日线OI (向后兼容, period='1d')。 */
     public Map<String, List<OpenInterestData>> getOpenInterestBatch(List<String> symbols, int days) {
+        return getOpenInterestBatch(symbols, "1d", days);
+    }
+
+    public Map<String, List<OpenInterestData>> getOpenInterestBatch(List<String> symbols, String period, int limit) {
         Map<String, List<OpenInterestData>> result = new HashMap<>();
         for (String symbol : symbols) {
-            List<OpenInterestData> oi = getOpenInterestHistory(symbol, days);
+            List<OpenInterestData> oi = getOpenInterestHistory(symbol, period, limit);
             if (!oi.isEmpty()) result.put(symbol, oi);
         }
         return result;

@@ -42,5 +42,9 @@ public class AnalysisReport {
         private double changePercent;
         private String detail;
         private Integer score;
+        // 综合评分层专用 (其余分析器不填, 保持向后兼容)
+        private String stage;                    // 入场阶段: WATCH/SETUP/WAIT_PULLBACK/ENTRY/AVOID
+        private String side;                     // 方向: long/short/none
+        private Map<String, Object> scoreBreakdown; // 各维度得分拆解
     }
 }

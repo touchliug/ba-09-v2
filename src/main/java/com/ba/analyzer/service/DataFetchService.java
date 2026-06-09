@@ -121,6 +121,11 @@ public class DataFetchService {
         log.info("Funding rate sync done");
     }
 
+    /** 从DB读取最近的资金费率 (供特征引擎使用, 升序返回)。 */
+    public List<com.ba.analyzer.model.FundingRateData> getRecentFundingRates(String symbol, int limit) {
+        return dataStore.getFundingRates(symbol, limit);
+    }
+
     public List<OpenInterestData> fetchOpenInterestHistory(String symbol, int days) {
         List<OpenInterestData> stored = dataStore.getOpenInterestHistory(symbol, days);
         if (stored.size() >= days) {
@@ -133,23 +138,51 @@ public class DataFetchService {
     }
 
     public Map<String, List<OpenInterestData>> fetchOpenInterestHistoryBatch(List<String> symbols, int days) {
-        Map<String, List<OpenInterestData>> stored = dataStore.getOpenInterestBatch(symbols, days);
-        if (stored.size() >= symbols.size() * 0.9) {
-            log.info("SQLite hit for OI history batch: {} symbols", stored.size());
+        return fetchOiHistoryByPeriod(symbols, "1d", days);
+    }
+
+    /**
+     * 按指定周期(5m/1h/6h/1d等)批量获取OI历史。
+     * 先读DB(对应period), 命中率达标则直接返回; 否则从币安openInterestHist拉取并写回。
+     * 币安openInterestHist支持的period: 5m,15m,30m,1h,2h,4h,6h,12h,1d。
+     */
+    public Map<String, List<OpenInterestData>> fetchOiHistoryByPeriod(List<String> symbols, String period, int limit) {
+        Map<String, List<OpenInterestData>> stored = dataStore.getOpenInterestBatch(symbols, period, limit);
+        boolean fresh = !"1d".equals(period) ? isOiFresh(stored, period) : true;
+        if (stored.size() >= symbols.size() * 0.9 && fresh) {
+            log.info("DB hit for {} OI history batch: {} symbols", period, stored.size());
             return stored;
         }
-        log.info("Fetching OI history from API for {} symbols, {} days", symbols.size(), days);
+        log.info("Fetching {} OI history from API for {} symbols, {} periods", period, symbols.size(), limit);
         ConcurrentMap<String, List<OpenInterestData>> result = new ConcurrentHashMap<>();
         binanceClient.executeConcurrent(symbols, symbol -> {
-            List<OpenInterestData> oiHistory = binanceClient.getOpenInterestHistory(symbol, "1d", days);
+            List<OpenInterestData> oiHistory = binanceClient.getOpenInterestHistory(symbol, period, limit);
             if (!oiHistory.isEmpty()) {
                 result.put(symbol, oiHistory);
-                dataStore.saveOpenInterest(symbol, oiHistory);
+                dataStore.saveOpenInterest(symbol, period, oiHistory);
             }
             return symbol;
         });
-        log.info("Fetched and stored OI history for {} symbols", result.size());
+        log.info("Fetched and stored {} OI history for {} symbols", period, result.size());
         return result;
+    }
+
+    private boolean isOiFresh(Map<String, List<OpenInterestData>> stored, String period) {
+        if (stored.isEmpty()) return false;
+        long periodMs = intervalToMillis(period);
+        long now = System.currentTimeMillis();
+        return stored.values().stream().allMatch(list -> {
+            if (list.isEmpty()) return false;
+            OpenInterestData latest = list.get(list.size() - 1);
+            long ts = latest.getTimestamp() > 0 ? latest.getTimestamp() : latest.getTime();
+            return now - ts < periodMs * 3;
+        });
+    }
+
+    /** 同步日内5m OI到DB(供6小时级点火检测使用)。 */
+    public void syncIntradayOi(List<String> symbols, int limit) {
+        log.info("Syncing 5m OI for {} symbols, {} periods", symbols.size(), limit);
+        fetchOiHistoryByPeriod(symbols, "5m", limit);
     }
 
     public void preloadDailyKlines(List<String> symbols, int maxDays) {

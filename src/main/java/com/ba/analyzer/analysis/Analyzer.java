@@ -28,6 +28,23 @@ public interface Analyzer {
         return true;
     }
 
+    /**
+     * 是否依赖日内(5m级)数据。
+     * 返回true的分析器在short-term批次(每5分钟,已同步5m OI)运行;
+     * 返回false的在daily批次(每天,预加载日线)运行。
+     */
+    default boolean requiresIntradayData() {
+        return false;
+    }
+
+    /**
+     * 该分析器需要的日线历史天数(用于daily批次预加载)。
+     * 默认0; AbstractKlineAnalyzer会从默认参数的"days"推导, 无"days"的分析器自行覆盖。
+     */
+    default int requiredDays() {
+        return 0;
+    }
+
     default int getIntParam(Map<String, Object> params, String key, int defaultValue) {
         if (params == null || !params.containsKey(key)) return defaultValue;
         Object val = params.get(key);

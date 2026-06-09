@@ -274,6 +274,16 @@ public class AnalysisController {
                 params.put("takeProfitPct", Map.of("type", "double", "description", "止盈点位%", "default", 6.0));
                 params.put("stopLossPct", Map.of("type", "double", "description", "止损点位%", "default", 4.0));
                 params.put("volumeConfirmRatio", Map.of("type", "double", "description", "反转日量比阈值(1.0=不过滤)", "default", 1.0));
+                params.put("qualityMinScore", Map.of("type", "int", "description", "反转质量分最低分(0-100,0=不过滤;回测建议55)", "default", 0));
+                yield params;
+            }
+            case "综合评分" -> {
+                params.put("minScore", Map.of("type", "int", "description", "最低综合分(0-100)", "default", 50));
+                params.put("oiWeight", Map.of("type", "int", "description", "OI维度权重", "default", 25));
+                params.put("priceWeight", Map.of("type", "int", "description", "价格维度权重", "default", 20));
+                params.put("fundingWeight", Map.of("type", "int", "description", "资金费率维度权重", "default", 15));
+                params.put("volumeWeight", Map.of("type", "int", "description", "量能维度权重", "default", 15));
+                params.put("earlyPriceMaxPct", Map.of("type", "double", "description", "早期价格窗口上限%(超出价格分递减,防追高)", "default", 15.0));
                 yield params;
             }
             case "山寨币暴涨预警" -> {

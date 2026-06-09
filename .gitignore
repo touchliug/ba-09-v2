@@ -7,3 +7,5 @@ target/
 result.json
 data/analyzer.db
 reports/
+__pycache__/
+*.pyc
