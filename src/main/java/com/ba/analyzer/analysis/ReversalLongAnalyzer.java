@@ -217,7 +217,7 @@ public class ReversalLongAnalyzer extends AbstractKlineAnalyzer {
 
                 // Format entry date
                 java.time.LocalDateTime entryDate = java.time.LocalDateTime.ofEpochSecond(
-                        entryDay.getOpenTime() / 1000, 0, java.time.ZoneOffset.UTC);
+                        entryDay.getOpenTime() / 1000, 0, java.time.ZoneOffset.ofHours(8));
                 String dateStr = entryDate.format(java.time.format.DateTimeFormatter.ofPattern("MM-dd"));
 
                 matched.add(AnalysisReport.CoinAnalysis.builder()

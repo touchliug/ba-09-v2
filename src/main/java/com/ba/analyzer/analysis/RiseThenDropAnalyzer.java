@@ -95,11 +95,11 @@ public class RiseThenDropAnalyzer extends AbstractKlineAnalyzer {
             // Format dates
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MM-dd");
             String riseStart = java.time.LocalDateTime.ofEpochSecond(
-                    prevDays.get(0).getOpenTime() / 1000, 0, ZoneOffset.UTC).format(fmt);
+                    prevDays.get(0).getOpenTime() / 1000, 0, ZoneOffset.ofHours(8)).format(fmt);
             String riseEnd = java.time.LocalDateTime.ofEpochSecond(
-                    prevDays.get(prevDays.size() - 1).getOpenTime() / 1000, 0, ZoneOffset.UTC).format(fmt);
+                    prevDays.get(prevDays.size() - 1).getOpenTime() / 1000, 0, ZoneOffset.ofHours(8)).format(fmt);
             String dropDate = java.time.LocalDateTime.ofEpochSecond(
-                    today.getOpenTime() / 1000, 0, ZoneOffset.UTC).format(fmt);
+                    today.getOpenTime() / 1000, 0, ZoneOffset.ofHours(8)).format(fmt);
 
             matched.add(AnalysisReport.CoinAnalysis.builder()
                     .symbol(symbol)

@@ -11,8 +11,8 @@ spring:
     log-resolved-exception: false
   web:
   datasource:
-#    url: jdbc:mysql://192.168.193.128:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    url: jdbc:mysql://localhost:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+#    url: jdbc:mysql://192.168.193.128:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/ba?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
 
     username: root
     password: ${MYSQL_PASSWORD}
@@ -165,9 +165,9 @@ binance:
       early-price-max-pct: 15.0
 
   schedule:
-    # JVM 固定 UTC 运行 (见 BinanceAnalyzerApplication)。以下 cron 均为 UTC 时刻。
-    symbol-update: "0 0 22 * * ?"     # UTC22:00 = 北京06:00, 更新合约列表
-    daily-analysis: "0 5 0 * * ?"     # UTC00:05 = 北京08:05, 紧接币安日K收盘(UTC00:00)后执行
+    # JVM 固定 Asia/Shanghai 运行 (见 BinanceAnalyzerApplication)。以下 cron 均为北京时间。
+    symbol-update: "0 0 6 * * ?"
+    daily-analysis: "0 5 8 * * ?"
     short-term-analysis: "0 */5 * * * ?"
     daily-kline-sync: "0 37 * * * ?"
 

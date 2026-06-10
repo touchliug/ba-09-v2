@@ -15,9 +15,9 @@ import java.util.TimeZone;
 public class BinanceAnalyzerApplication {
 
     public static void main(String[] args) {
-        // 统一以 UTC 运行: 与币安日K收盘点(UTC 00:00)对齐, 不随部署服务器(瑞典VPS)的本地时区漂移。
+        // JVM 固定 Asia/Shanghai 运行: 行为与北京开发环境一致, 不随部署服务器(瑞典VPS)的本地时区漂移。
         // 必须在 SpringApplication.run 之前设置, 否则调度器/日志已读取旧默认时区。
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
         SpringApplication.run(BinanceAnalyzerApplication.class, args);
     }
 }
