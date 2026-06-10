@@ -66,7 +66,7 @@ public class NMinMaxAnalyzer implements Analyzer {
         Map<String, List<KlineData>> klineMap = dataFetchService.fetchDailyKlines(symbols, days);
 
         DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("MM-dd");
-        ZoneId zone = ZoneId.of("Asia/Shanghai");
+        ZoneId zone = ZoneId.of("UTC");
         List<AnalysisReport.CoinAnalysis> matched = new ArrayList<>();
 
         for (Map.Entry<String, List<KlineData>> entry : klineMap.entrySet()) {

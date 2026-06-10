@@ -98,7 +98,7 @@ public class NDayLowAnalyzer implements Analyzer {
             String lowDate = "";
             if (minPriceTime > 0) {
                 java.time.LocalDateTime dt = java.time.LocalDateTime.ofEpochSecond(
-                        minPriceTime / 1000, 0, java.time.ZoneOffset.ofHours(8));
+                        minPriceTime / 1000, 0, java.time.ZoneOffset.UTC);
                 lowDate = dt.format(java.time.format.DateTimeFormatter.ofPattern("MM-dd"));
             }
 

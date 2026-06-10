@@ -10,7 +10,8 @@
   - (可选)反转日量比 >= volumeConfirmRatio
   - 入场: 反转日次日开盘价做多
 出场: 止盈 +takeProfitPct% / 止损 -stopLossPct%, 逐日按高低价判定, 同根同穿按止损(保守)
-衰竭评分: 放量(40)+长下影(30)+止跌翻红(30), 与Java版同公式
+质量评分(0-100): 连跌天数(25)+累计跌幅(20)+反转涨幅(20)+下影占比(20)+收盘位置(15),
+                 与Java版 ReversalLongAnalyzer.scoreQuality 同公式 (旧的放量+长下影评分经回测证实反向, 已废弃)。
 """
 import pymysql, collections
 
@@ -19,7 +20,6 @@ CFG = dict(
     reversalMinPct=1.0, reversalMaxPct=4.0,
     takeProfitPct=6.0, stopLossPct=4.0,
     volumeConfirmRatio=1.0,
-    volSurgeStrong=3.0, lowerWickMinRatio=0.25,
     maxHoldDays=30,   # 止盈止损都没触发时的最长持有(到期按收盘平)
 )
 
@@ -36,29 +36,46 @@ def load():
     c.close()
     return data
 
-def exhaustion_score(k, ds, de, rev_idx, rev_pct, rev_vol_ratio, cfg):
-    """复刻 scoreExhaustion。ds..de 为连跌区间索引, rev_idx 反转日。"""
-    # 放量分
-    volBase=cfg['volSurgeStrong'] or 3.0
-    volScore=round(min(1.0, rev_vol_ratio/volBase)*40)
-    # 长下影分
-    rd=k[rev_idx]
-    rng=rd['h']-rd['l']; bodyLow=min(rd['o'],rd['c'])
-    lw=(bodyLow-rd['l'])/rng if rng>0 else 0
-    wickBase=cfg['lowerWickMinRatio'] or 0.25
-    wickScore=round(min(1.0, lw/wickBase)*30)
-    # 止跌翻红分
-    recover=0
-    if rd['c']>rd['o']:
-        recover+=15
-        lastDrop=0
-        if de-1>=0:
-            pc=k[de-1]['c']
-            if pc>0: lastDrop=abs((k[de]['c']-pc)/pc*100)
-        rr=rev_pct/lastDrop if lastDrop>0 else 1.0
-        recover+=round(min(1.0,rr)*15)
-    total=min(100, volScore+wickScore+recover)
-    return total, volScore, wickScore, recover
+def quality_score(decline_days, decline_pct, rev_pct, rd):
+    """复刻 Java 版 ReversalLongAnalyzer.scoreQuality。
+    rd 为反转日K线 dict(o,h,l,c)。各档位权重由 2739 笔全量回测校准。
+    返回 (total, days, drop, rev, wick, pos)。"""
+    # 1) 连跌天数 (0-25): 5天最佳, 4/6次之, 7+天接飞刀
+    days_s = {5: 25, 6: 15, 4: 12}.get(decline_days, 0)
+
+    # 2) 累计跌幅 (0-20): 6-7%最佳, 越大越差
+    if decline_pct < 6:   drop_s = 15
+    elif decline_pct < 7: drop_s = 20
+    elif decline_pct < 8: drop_s = 15
+    elif decline_pct < 9: drop_s = 10
+    else:                 drop_s = 3
+
+    # 3) 反转日涨幅 (0-20): 越温和越好 (1-1.5%最佳)
+    if rev_pct < 1.5:   rev_s = 20
+    elif rev_pct < 2:   rev_s = 16
+    elif rev_pct < 2.5: rev_s = 10
+    elif rev_pct < 3:   rev_s = 5
+    else:               rev_s = 0
+
+    # 反转日形态
+    rng = rd['h'] - rd['l']
+    body_low = min(rd['o'], rd['c'])
+
+    # 4) 下影占比 (0-20): 越短越好 (长下影是反向信号)
+    lw = (body_low - rd['l']) / rng if rng > 0 else 0
+    if lw < 0.1:   wick_s = 20
+    elif lw < 0.2: wick_s = 12
+    elif lw < 0.3: wick_s = 4
+    else:          wick_s = 0
+
+    # 5) 收盘位置 (0-15): 收在当日下半区最好 (温和试探优于冲高)
+    close_pos = (rd['c'] - rd['l']) / rng if rng > 0 else 0.5
+    if close_pos < 0.5:   pos_s = 15
+    elif close_pos < 0.7: pos_s = 8
+    else:                 pos_s = 0
+
+    total = min(100, days_s + drop_s + rev_s + wick_s + pos_s)
+    return total, days_s, drop_s, rev_s, wick_s, pos_s
 
 def find_signals(sym, k, cfg):
     """逐日滚动: 对每个可能的反转日(rev_idx), 检查其前面是否构成连跌, 产出信号。"""
@@ -88,8 +105,8 @@ def find_signals(sym, k, cfg):
         avgvol=sum(dvol)/len(dvol) if dvol else 0
         rev_vol_ratio=rd['qv']/avgvol if avgvol>0 else 0
         if cfg['volumeConfirmRatio']>1.0 and rev_vol_ratio<cfg['volumeConfirmRatio']: continue
-        # 评分
-        score,vs,ws,rs=exhaustion_score(k,ds,de,rev,rev_pct,rev_vol_ratio,cfg)
+        # 质量评分 (与 Java scoreQuality 同公式)
+        score,ds_s,dr_s,rv_s,wk_s,ps_s=quality_score(decline_days,decline_pct,rev_pct,rd)
         sigs.append(dict(sym=sym, entry_idx=rev+1, score=score,
                          decline_days=decline_days, decline_pct=decline_pct,
                          rev_pct=rev_pct, vol_ratio=rev_vol_ratio))
@@ -128,8 +145,8 @@ def main():
             ret,hold,reason=r
             trades.append(dict(**sig, ret=ret, hold=hold, reason=reason))
     print(f"总信号(交易)数: {len(trades)}\n")
-    # 分档对比
-    buckets=[(0,'全部 score>=0'),(40,'score>=40'),(60,'score>=60'),(70,'score>=70'),(80,'score>=80')]
+    # 分档对比 (阈值对齐 Java 注释关口: 55/75/85)
+    buckets=[(0,'全部 score>=0'),(55,'score>=55'),(65,'score>=65'),(75,'score>=75'),(85,'score>=85')]
     print(f"{'档位':<16}{'交易数':>7}{'胜率':>9}{'平均收益%':>11}{'累计收益%':>11}{'盈亏比':>9}")
     print("-"*70)
     for thr,label in buckets:
