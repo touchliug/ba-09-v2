@@ -28,6 +28,7 @@ class CompositeScoreAnalyzerTest {
 
     @BeforeEach
     void setUp() {
+		// test github
         AppProperties.AnalysisConfig ac = new AppProperties.AnalysisConfig();
         ac.setCompositeScore(new AppProperties.CompositeScoreConfig());
         when(appProperties.getAnalysis()).thenReturn(ac);
